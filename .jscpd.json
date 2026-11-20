@@ -1,13 +1,5 @@
 {
-  "path": [
-    "."
-  ],
-  "format": [
-    "typescript"
-  ],
-  "ignore": [
-    "**/*.d.ts",
-    "**/node_modules/**"
-  ],
-  "gitignore": true
+  "path": ["src"],
+  "format": ["typescript"],
+  "ignore": ["**/*.d.ts"]
 }
