@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    uses: avi2d/workflows/.github/workflows/changes.yml@v3
+    permissions: { contents: read }
+  static:
+    needs: changes
+    if: needs.changes.outputs.release != 'true'
+    uses: avi2d/workflows/.github/workflows/static.yml@v3
+    permissions: { contents: read, actions: write, statuses: write, pull-requests: read }
+  test:
+    needs: changes
+    if: needs.changes.outputs.release != 'true' && needs.changes.outputs.docs-only != 'true'
+    uses: avi2d/workflows/.github/workflows/test.yml@v3
+    permissions: { contents: read, actions: write }
+    with:
+      runs-on: "${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}"
+  checks:
+    needs: [changes, static, test]
+    if: always()
+    uses: avi2d/workflows/.github/workflows/gate.yml@v3
+    permissions: { contents: read, statuses: write }
+    with:
+      results: ${{ toJSON(needs) }}
+      # The jobs the gate passes as skipped: every job but changes on the release run, and every job but changes and static on a docs-only change.
+      skips: ${{ needs.changes.outputs.release == 'true' && 'static test' || needs.changes.outputs.docs-only == 'true' && 'test' || '' }}

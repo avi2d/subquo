@@ -1,0 +1,9 @@
+name: release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  pull-request:
+    uses: avi2d/workflows/.github/workflows/release-pr.yml@v3
+    permissions: { contents: write, pull-requests: write, actions: write }

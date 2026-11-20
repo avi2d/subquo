@@ -1,0 +1,31 @@
+{
+  "name": "subquo",
+  "version": "0.0.0",
+  "description": "Subscription quota reader for paid AI coding accounts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/avi2d/subquo.git"
+  },
+  "author": {
+    "name": "avi2d",
+    "email": "avi2dg@gmail.com"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "checks-effect-scope",
+    "lint": "oxlint && checks-lint",
+    "typecheck": "tsc --noEmit && effect-tsgo diagnostics --project tsconfig.json --format text --strict",
+    "test": "checks-test",
+    "test:fast": "checks-test --changed"
+  },
+  "devDependencies": {
+    "@avi2dg/checks": "0.110.0",
+    "@hughescr/stryker-bun-runner": "1.4.0",
+    "@stryker-mutator/core": "10.0.0",
+    "@types/bun": "1.4.5"
+  },
+  "trustedDependencies": [
+    "@swc/core"
+  ]
+}
