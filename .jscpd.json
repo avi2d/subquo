@@ -1,0 +1,13 @@
+{
+  "path": [
+    "."
+  ],
+  "format": [
+    "typescript"
+  ],
+  "ignore": [
+    "**/*.d.ts",
+    "**/node_modules/**"
+  ],
+  "gitignore": true
+}

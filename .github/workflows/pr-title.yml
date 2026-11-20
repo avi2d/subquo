@@ -1,0 +1,14 @@
+name: pr-title
+
+on:
+  pull_request:
+    types: [edited]
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    uses: avi2d/workflows/.github/workflows/pr-title.yml@v3
+    permissions: { contents: read, statuses: write, pull-requests: read }
