@@ -39,8 +39,10 @@ Run `bun run subquo read` for text output, including any sign-in countdowns at t
 1. Repeat the paired commands at your usual quota check times for a full week.
 1. Keep the comparison reports private and check the result of every row.
 
-The command marks a subquo row `WORSE` if a value is missing or stale, the window or reset differs, or the percentages differ by more than one percentage point.
-It marks a row `UNCHECKED` if subquo has a value but no current clauth value can confirm it.
+A clauth value is current if clauth fetched it less than 120 seconds ago, does not mark it stale and its reset is still ahead.
+The command marks a subquo row `WORSE` if a subquo value is missing or stale, or if clauth reports a window subquo does not.
+It also marks a row `WORSE` if the reset differs from a current clauth value, or the percentage differs from it by more than one percentage point.
+It marks a row `UNCHECKED` if subquo has a value but no current clauth value can confirm it, including a window only subquo reports.
 The command exits with a nonzero status unless every row matches.
 If any row is worse or unchecked, keep orc and firstmate on their current readers.
 

@@ -76,6 +76,7 @@ An account's usable headroom is the smallest of the limits that apply to a job, 
 With 40% left in a five-hour window and 12% left in a weekly window, the headroom is 12%.
 A window that covers only one kind of work, such as code review, does not limit other jobs.
 A limit with an unknown value leaves the headroom unknown.
+A Claude model limit whose model subquo cannot name makes the account read as login unchecked, so the limit is never dropped.
 
 ## Logins
 

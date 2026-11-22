@@ -51,7 +51,7 @@ function clauthIdentity(label: string): WindowIdentity | undefined {
 function clauthWindows(profile: ClAuthProfile, reportAt: number, now: number) {
   const fetchedAt = profile.fetched_at === null ? undefined : DateTime.toEpochMillis(profile.fetched_at);
   const stale = profile.stale || fetchedAt === undefined || fetchedAt > reportAt
-    || reportAt > now || now - reportAt >= maxReportAgeMs;
+    || reportAt > now || now - fetchedAt >= maxReportAgeMs;
   return profile.windows.map(({ label, utilization_pct, resets_at }) => ({
     identity: clauthIdentity(label),
     measure: {
@@ -87,7 +87,7 @@ function accountRows(own: ReturnType<typeof subquoWindows>, baseline: ReturnType
       rows.push({ window: identity, subquo: measure, clauth: match.measure });
     } else {
       rows.push({
-        window: identity, subquo: measure, ...(baseline.length === 0 ? {} : { differentWindow: true }),
+        window: identity, subquo: measure, ...(candidates.length === 0 ? {} : { differentWindow: true }),
       });
     }
   }
@@ -106,15 +106,16 @@ function verdict({ differentWindow, subquo, clauth }: Row): string {
   const reasons: string[] = [];
   if (subquo === undefined || subquo.percentLeft === null || subquo.resetsAt === null) reasons.push("missing value");
   if (subquo?.status === "stale") reasons.push("stale value");
-  if (differentWindow || (subquo?.resetsAt && clauth?.resetsAt && subquo.resetsAt !== clauth.resetsAt)) {
+  const current = clauth?.status === "fresh" ? clauth : undefined;
+  if (differentWindow || (subquo?.resetsAt && current?.resetsAt && subquo.resetsAt !== current.resetsAt)) {
     reasons.push("different window");
   }
-  if (subquo?.percentLeft != null && clauth?.percentLeft != null
-      && Math.abs(subquo.percentLeft - clauth.percentLeft) > tolerancePoints) {
+  if (subquo?.percentLeft != null && current?.percentLeft != null
+      && Math.abs(subquo.percentLeft - current.percentLeft) > tolerancePoints) {
     reasons.push(`difference exceeds ${tolerancePoints} percentage point`);
   }
   if (reasons.length > 0) return `WORSE: ${reasons.join(", ")}`;
-  if (clauth === undefined || clauth.status !== "fresh" || clauth.percentLeft === null || clauth.resetsAt === null) {
+  if (current === undefined || current.percentLeft === null || current.resetsAt === null) {
     return "UNCHECKED: no current clauth value";
   }
   return "MATCH";

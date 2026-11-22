@@ -96,6 +96,30 @@ test("a scoped Claude reply keeps the model window out of the shared weekly wind
   ]);
 });
 
+test("a Claude reply with an unmapped scoped limit reads as unchecked rather than dropping that limit", async () => {
+  const shared = [
+    { kind: "session", percent: 22, resets_at: reset },
+    { kind: "weekly_all", percent: 41, resets_at: reset },
+  ];
+  for (const scope of [{ model: { id: null, display_name: "Mystery" } }, { model: { id: "claude-opus-sonnet" } }, null]) {
+    const payload = { limits: [...shared, { kind: "weekly_scoped", percent: 100, resets_at: reset, scope }] };
+    expect(parseClaudeUsagePayload(payload)).toBeUndefined();
+    const fetchImpl: FetchImpl = () => Promise.resolve(jsonResponse(payload));
+    const reading = await Effect.runPromise(requestClaudeReading({ accessToken: "live-token" }, fetchImpl, now));
+    expect(reading).toEqual({ code: "auth_unverified" });
+  }
+});
+
+test("an unrelated Claude limit kind does not block the model windows", () => {
+  const windows = parseClaudeUsagePayload({
+    limits: [
+      { kind: "session", percent: 22, resets_at: reset },
+      { kind: "fake_unrelated_kind", percent: 90, resets_at: reset },
+    ],
+  });
+  expect(windows).toEqual([{ id: "five-hour", scope: "all", percentLeft: 78, resetsAt: reset }]);
+});
+
 test("a Claude kind-only reply neither skips the new session limit nor drops the legacy weekly fallback", () => {
   const windows = parseClaudeUsagePayload({
     limits: [{ kind: "session", percent: 25, resets_at: reset }],

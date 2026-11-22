@@ -34,7 +34,20 @@ The checks also ran with the real clock, and the Keychain item modification time
 
 The eight-hour intervals describe two access tokens, not the lifetime of either sign-in.
 On macOS, `claude auth status` reported both accounts signed in even though one access token had already expired.
-The overall sign-in lifetime and refresh-token expiry were not measured.
+The overall sign-in lifetime was not measured.
+
+## Claude Code refresh-token expiry
+
+A later check read one saved Claude Code login by key names and a digit count only.
+Its `claudeAiOauth` block had a `refreshTokenExpiresAt` key.
+The value was a 13-digit integer, which fits epoch milliseconds.
+[clauth issue 75](https://github.com/uwuclxdy/clauth/issues/75) also lists `refreshTokenExpiresAt` among the keys Claude Code writes, with a 13-digit example.
+The same issue names the field as the only input to Claude Code's refresh-token expiry notice.
+It also reports that clauth 0.15.1 drops the key whenever it rewrites a login file.
+
+The check covered one login on one machine.
+It does not show that every Claude Code login has the field, or how long a sign-in lives.
+Without the field, subquo shows no sign-in countdown for that account.
 
 ## Setup-token output
 

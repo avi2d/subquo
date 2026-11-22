@@ -57,14 +57,14 @@ export function claudeModelScope(name: string): Pick<QuotaWindow, "id" | "scope"
   return known.length === 1 ? { id: `${scope}-weekly`, scope } : undefined;
 }
 
-function claudeLimitIdentity(entry: Record<string, unknown>): Pick<QuotaWindow, "id" | "scope"> | undefined {
+function claudeLimitIdentity(entry: Record<string, unknown>): Pick<QuotaWindow, "id" | "scope"> | "unrelated" | "unmapped" {
   if (entry["kind"] === "session") return { id: "five-hour", scope: "all" };
   if (entry["kind"] === "weekly_all") return { id: "weekly", scope: "all" };
-  if (entry["kind"] !== "weekly_scoped") return undefined;
+  if (entry["kind"] !== "weekly_scoped") return "unrelated";
   const scope = entry["scope"];
-  if (!isRecord(scope) || !isRecord(scope["model"])) return undefined;
+  if (!isRecord(scope) || !isRecord(scope["model"])) return "unmapped";
   const name = scope["model"]["display_name"] ?? scope["model"]["id"];
-  return typeof name === "string" ? claudeModelScope(name) : undefined;
+  return (typeof name === "string" ? claudeModelScope(name) : undefined) ?? "unmapped";
 }
 
 function addClaudeLegacyWindows(raw: Record<string, unknown>, windows: Map<string, QuotaWindow>): boolean {
@@ -93,7 +93,8 @@ export function parseClaudeUsagePayload(raw: unknown): QuotaWindow[] | undefined
   for (const entry of limits) {
     if (!isRecord(entry)) return undefined;
     const identity = claudeLimitIdentity(entry);
-    if (!identity) continue;
+    if (identity === "unrelated") continue;
+    if (identity === "unmapped") return undefined;
     const window = claudeWindow(entry["percent"], entry["resets_at"] ?? entry["reset_at"], identity.id, identity.scope);
     if (!window || windows.has(window.id)) return undefined;
     windows.set(window.id, window);
