@@ -101,6 +101,7 @@ function claudeTopLevelWindows(raw: Record<string, unknown>): QuotaWindow[] | un
 export function parseClaudeUsagePayload(raw: unknown): QuotaWindow[] | undefined {
   if (!isRecord(raw)) return undefined;
   const scoped = raw["limits"];
+  if (scoped !== undefined && scoped !== null && !Array.isArray(scoped)) return undefined;
   if (Array.isArray(scoped)) {
     if (scoped.length === 0) return undefined;
     const windows: QuotaWindow[] = [];
@@ -122,8 +123,6 @@ function relativeReset(value: unknown, now: number): string | null | undefined {
 function durationSeconds(raw: Record<string, unknown>): number | undefined {
   const seconds = raw["limit_window_seconds"];
   if (typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0 && Number.isInteger(seconds)) return seconds;
-  const mins = raw["windowDurationMins"];
-  if (typeof mins === "number" && Number.isFinite(mins) && mins >= 0 && Number.isInteger(mins)) return mins * 60;
   return undefined;
 }
 
@@ -147,6 +146,17 @@ type CodexIdentities = {
   readonly unfamiliar: (seconds: number) => QuotaWindow["id"];
 };
 
+function codexPairIdentities(
+  session: QuotaWindow["id"],
+  weekly: QuotaWindow["id"],
+  unfamiliar: (seconds: number) => QuotaWindow["id"],
+): readonly [CodexIdentities, CodexIdentities] {
+  return [
+    { positional: session, session, weekly, unfamiliar },
+    { positional: weekly, session, weekly, unfamiliar },
+  ];
+}
+
 function codexWindow(
   raw: unknown,
   scope: QuotaWindow["scope"],
@@ -154,23 +164,14 @@ function codexWindow(
   identities: CodexIdentities,
 ): QuotaWindow | undefined {
   if (!isRecord(raw)) return undefined;
-  const used = raw["used_percent"] ?? raw["usedPercent"];
-  const percent = finitePercent(used);
+  const percent = finitePercent(raw["used_percent"]);
   if (percent === undefined) return undefined;
   const seconds = durationSeconds(raw);
-  const reset = epochOrIsoToIso(raw["reset_at"] ?? raw["resetsAt"] ?? raw["resetAt"])
+  const reset = epochOrIsoToIso(raw["reset_at"])
     ?? relativeReset(raw["reset_after_seconds"], now);
   if (reset === undefined) return undefined;
   const id = codexId(seconds, identities.positional, identities.session, identities.weekly, identities.unfamiliar);
   return { id, scope, percentLeft: 100 - percent, resetsAt: reset };
-}
-
-function codexContainer(raw: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(raw)) return undefined;
-  const nested = raw["rate_limit"] ?? raw["rateLimits"] ?? raw["rate_limits"];
-  if (isRecord(nested)) return nested;
-  if (isRecord(raw["primary_window"]) || isRecord(raw["primary"])) return raw;
-  return undefined;
 }
 
 function codexPair(
@@ -181,13 +182,13 @@ function codexPair(
   secondary: CodexIdentities,
 ): QuotaWindow[] | undefined {
   const windows: QuotaWindow[] = [];
-  const rawPrimary = container["primary_window"] ?? container["primary"];
+  const rawPrimary = container["primary_window"];
   if (rawPrimary !== undefined && rawPrimary !== null) {
     const window = codexWindow(rawPrimary, scope, now, primary);
     if (!window) return undefined;
     windows.push(window);
   }
-  const rawSecondary = container["secondary_window"] ?? container["secondary"];
+  const rawSecondary = container["secondary_window"];
   if (rawSecondary !== undefined && rawSecondary !== null) {
     const window = codexWindow(rawSecondary, scope, now, secondary);
     if (!window) return undefined;
@@ -202,26 +203,33 @@ function codexSlug(value: unknown): string | undefined {
   return slug.length > 0 ? slug.slice(0, 48) : undefined;
 }
 
+function codexNamedPair(
+  item: Record<string, unknown>,
+  slug: string,
+  now: number,
+): QuotaWindow[] | undefined {
+  const containerField = item["rate_limit"];
+  if (containerField === undefined || containerField === null) return [];
+  if (!isRecord(containerField)) return undefined;
+  const session = `model-${slug}-5h`;
+  const weekly = `model-${slug}-7d`;
+  const unfamiliar = (seconds: number): QuotaWindow["id"] => `model-${slug}-window-${seconds}s`;
+  const [primary, secondary] = codexPairIdentities(session, weekly, unfamiliar);
+  return codexPair(containerField, slug, now, primary, secondary);
+}
+
 function codexNamedWindows(raw: unknown, now: number): QuotaWindow[] | undefined {
   if (!isRecord(raw)) return undefined;
   const windows: QuotaWindow[] = [];
-  const additional = Array.isArray(raw["additional_rate_limits"]) ? raw["additional_rate_limits"] : [];
-  for (const item of additional) {
+  const additionalField = raw["additional_rate_limits"];
+  if (additionalField === undefined || additionalField === null) return windows;
+  if (!Array.isArray(additionalField)) return undefined;
+  for (const item of additionalField) {
+    if (item === null) continue;
     if (!isRecord(item)) return undefined;
     const slug = codexSlug(item["metered_feature"] ?? item["limit_name"]);
-    const container = isRecord(item["rate_limit"]) ? item["rate_limit"] : undefined;
-    if (!slug || !container) continue;
-    const pair = codexPair(container, slug, now, {
-      positional: `model-${slug}-5h`,
-      session: `model-${slug}-5h`,
-      weekly: `model-${slug}-7d`,
-      unfamiliar: (seconds) => `model-${slug}-window-${seconds}s`,
-    }, {
-      positional: `model-${slug}-7d`,
-      session: `model-${slug}-5h`,
-      weekly: `model-${slug}-7d`,
-      unfamiliar: (seconds) => `model-${slug}-window-${seconds}s`,
-    });
+    if (!slug) continue;
+    const pair = codexNamedPair(item, slug, now);
     if (!pair) return undefined;
     windows.push(...pair);
   }
@@ -231,35 +239,21 @@ function codexNamedWindows(raw: unknown, now: number): QuotaWindow[] | undefined
 export function parseCodexUsagePayload(raw: unknown, now: number): QuotaWindow[] | undefined {
   if (!isRecord(raw)) return undefined;
   const windows: QuotaWindow[] = [];
-  const container = codexContainer(raw);
+  const rateLimitField = raw["rate_limit"];
+  if (rateLimitField !== undefined && rateLimitField !== null && !isRecord(rateLimitField)) return undefined;
+  const container = isRecord(rateLimitField) ? rateLimitField : undefined;
   if (container) {
-    const pair = codexPair(container, "all", now, {
-      positional: "five-hour",
-      session: "five-hour",
-      weekly: "weekly",
-      unfamiliar: (seconds) => `window-${seconds}s`,
-    }, {
-      positional: "weekly",
-      session: "five-hour",
-      weekly: "weekly",
-      unfamiliar: (seconds) => `window-${seconds}s`,
-    });
+    const [primary, secondary] = codexPairIdentities("five-hour", "weekly", (seconds) => `window-${seconds}s`);
+    const pair = codexPair(container, "all", now, primary, secondary);
     if (!pair) return undefined;
     windows.push(...pair);
   }
-  const review = isRecord(raw["code_review_rate_limit"]) ? raw["code_review_rate_limit"] : undefined;
+  const reviewField = raw["code_review_rate_limit"];
+  if (reviewField !== undefined && reviewField !== null && !isRecord(reviewField)) return undefined;
+  const review = isRecord(reviewField) ? reviewField : undefined;
   if (review) {
-    const pair = codexPair(review, "code-review", now, {
-      positional: "review-five-hour",
-      session: "review-five-hour",
-      weekly: "review-weekly",
-      unfamiliar: (seconds) => `review-window-${seconds}s`,
-    }, {
-      positional: "review-weekly",
-      session: "review-five-hour",
-      weekly: "review-weekly",
-      unfamiliar: (seconds) => `review-window-${seconds}s`,
-    });
+    const [primary, secondary] = codexPairIdentities("review-five-hour", "review-weekly", (seconds) => `review-window-${seconds}s`);
+    const pair = codexPair(review, "code-review", now, primary, secondary);
     if (!pair) return undefined;
     windows.push(...pair);
   }
@@ -309,26 +303,36 @@ function openCodeDurationSeconds(raw: unknown): number | undefined {
 
 export function parseOpenCodeUsagePayload(raw: unknown, now: number): QuotaWindow[] | undefined {
   if (!isRecord(raw)) return undefined;
-  const nested = isRecord(raw["usage"]) ? raw["usage"] : undefined;
-  const pick = (names: readonly string[]): unknown => {
-    for (const name of names) {
-      const fromNested = nested?.[name];
-      if (isRecord(fromNested)) return fromNested;
-      const fromRoot = raw[name];
-      if (isRecord(fromRoot)) return fromRoot;
+  const usageField = raw["usage"];
+  if (usageField !== undefined && usageField !== null && !isRecord(usageField)) return undefined;
+  const nested = isRecord(usageField) ? usageField : undefined;
+  const bucket = (names: readonly string[]): Record<string, unknown> | null | undefined => {
+    for (const source of [nested, raw]) {
+      if (source === undefined) continue;
+      for (const name of names) {
+        const value = source[name];
+        if (value === undefined || value === null) continue;
+        if (!isRecord(value)) return null;
+        return value;
+      }
     }
     return undefined;
   };
-  const rolling = pick(["rollingUsage", "rolling"]);
-  const buckets: Array<[unknown, QuotaWindow["id"], QuotaWindow["scope"]]> = [
+  const rolling = bucket(["rollingUsage", "rolling"]);
+  if (rolling === null) return undefined;
+  const weekly = bucket(["weeklyUsage", "weekly"]);
+  if (weekly === null) return undefined;
+  const monthly = bucket(["monthlyUsage", "monthly"]);
+  if (monthly === null) return undefined;
+  const buckets: Array<[Record<string, unknown> | undefined, QuotaWindow["id"], QuotaWindow["scope"]]> = [
     [rolling, openCodeDurationSeconds(rolling) === 18_000 ? "five-hour" : "rolling", "all"],
-    [pick(["weeklyUsage", "weekly"]), "weekly", "all"],
-    [pick(["monthlyUsage", "monthly"]), "monthly", "all"],
+    [weekly, "weekly", "all"],
+    [monthly, "monthly", "all"],
   ];
   const windows: QuotaWindow[] = [];
-  for (const [bucket, id, scope] of buckets) {
-    if (bucket === undefined || bucket === null) continue;
-    const window = openCodeWindow(bucket, id, scope, now);
+  for (const [entry, id, scope] of buckets) {
+    if (entry === undefined) continue;
+    const window = openCodeWindow(entry, id, scope, now);
     if (!window) return undefined;
     windows.push(window);
   }

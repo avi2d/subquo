@@ -220,7 +220,9 @@ test("a rejected Codex pass that expired mid-read still probes both addresses be
     calls.push(url);
     return Promise.resolve(statusResponse(401));
   };
-  const credentials = { accessToken: fakeJwt(now / 1000 + 1) };
+  const credentials = parseCodexCredentials(JSON.stringify({ tokens: { access_token: fakeJwt(now / 1000 + 1) } }));
+  if (!credentials) throw new Error("test credential rejected");
+  expect(credentials.expiresAt).toBe(now + 1000);
   const program = Effect.gen(function*() {
     yield* TestClock.setTime(now + 5000);
     return yield* requestCodexReading(credentials, fetchImpl, now);
@@ -228,6 +230,21 @@ test("a rejected Codex pass that expired mid-read still probes both addresses be
   const reading = await Effect.runPromise(program);
   expect(calls.length).toBe(2);
   expect(reading).toEqual({ code: "auth_unverified" });
+});
+
+test("a rejection followed by a miss does not read as unchecked when the pass was valid", async () => {
+  const calls: string[] = [];
+  const fetchImpl: FetchImpl = (url) => {
+    calls.push(url);
+    return Promise.resolve(statusResponse(url.endsWith("/wham/usage") ? 401 : 404));
+  };
+  const program = Effect.gen(function*() {
+    yield* TestClock.setTime(now);
+    return yield* requestCodexReading({ accessToken: "live-token", expiresAt: now + 60000 }, fetchImpl, now);
+  }).pipe(Effect.provide(TestClock.layer()));
+  const reading = await Effect.runPromise(program);
+  expect(calls.length).toBe(2);
+  expect(reading).toEqual({ code: "auth_required" });
 });
 
 test("a Codex rate limit on the first address stops without trying the second", async () => {

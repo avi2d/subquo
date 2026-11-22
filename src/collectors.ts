@@ -95,7 +95,10 @@ const attemptCodexEndpoint = Effect.fnUntraced(function*(
     if (outcome.kind === "timedOut") return { kind: "done", reading: timedOut } as const;
     return { kind: "next" } as const;
   }
-  if (outcome.response.status === 401 || outcome.response.status === 403) return { kind: "rejected" } as const;
+  if (outcome.response.status === 401 || outcome.response.status === 403) {
+    const rejectedAt = yield* Clock.currentTimeMillis;
+    return { kind: "rejected", expired: expiredAtRejection(credentials.expiresAt, rejectedAt) } as const;
+  }
   if (!outcome.response.ok) return { kind: "next" } as const;
   const text = yield* readBody(outcome.response);
   if (text === undefined) return { kind: "next" } as const;
@@ -108,17 +111,14 @@ export const requestCodexReading = Effect.fnUntraced(function*(
   fetchImpl: FetchImpl = fetch,
   now: number = Date.now(),
 ) {
-  let rejected = false;
+  let rejection: boolean | undefined;
   for (const url of CodexUsageUrls) {
     const attempt = yield* attemptCodexEndpoint(url, credentials, fetchImpl, now);
     if (attempt.kind === "done") return attempt.reading;
-    if (attempt.kind === "rejected") rejected = true;
+    if (attempt.kind === "rejected" && rejection === undefined) rejection = attempt.expired;
   }
-  if (rejected) {
-    const rejectedAt = yield* Clock.currentTimeMillis;
-    return expiredAtRejection(credentials.expiresAt, rejectedAt) ? unverified : required;
-  }
-  return unverified;
+  if (rejection === undefined) return unverified;
+  return rejection ? unverified : required;
 });
 
 export const requestOpenCodeReading = Effect.fnUntraced(function*(
