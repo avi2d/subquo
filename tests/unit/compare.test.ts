@@ -97,7 +97,7 @@ test("a window only subquo reports is unchecked rather than marked worse", async
   const report = compareClaude([enrolled], { accounts: [reading(fiveHour, fable)] }, await decodeReference(), now);
   expect(report.matched).toBe(false);
   expect(report.text).toContain("example\tfive-hour\t75%, reset 2030-01-01T01:00:00.000Z, fresh\t75%, reset 2030-01-01T01:00:00.000Z, fresh\tMATCH");
-  expect(report.text).toContain("example\tfable-weekly\t37%, reset 2030-01-01T01:00:00.000Z, fresh\tmissing\tUNCHECKED: no current clauth value");
+  expect(report.text).toContain("example\tfable-weekly/fable\t37%, reset 2030-01-01T01:00:00.000Z, fresh\tmissing\tUNCHECKED: no current clauth value");
   expect(report.text).not.toContain("WORSE");
 });
 
