@@ -326,15 +326,10 @@ export function parseOpenCodeUsagePayload(raw: unknown, now: number): QuotaWindo
   }
   return windows.length > 0 ? windows : undefined;
 }
-const ClaudeAccess = Schema.Struct({
-  accessToken: Schema.NonEmptyString,
-  expiresAt: Schema.optionalKey(Schema.Finite),
-});
+const ClaudeAccess = Schema.Struct({ accessToken: Schema.NonEmptyString, expiresAt: Schema.optionalKey(Schema.Finite) });
 const earliestRefreshExpiry = Date.UTC(2020, 0, 1);
 const latestDateValue = 8.64e15;
-const RefreshExpiry = Schema.Struct({
-  refreshTokenExpiresAt: Schema.Int.check(Schema.isBetween({ minimum: earliestRefreshExpiry, maximum: latestDateValue })),
-});
+const RefreshExpiry = Schema.Struct({ refreshTokenExpiresAt: Schema.Int.check(Schema.isBetween({ maximum: latestDateValue, minimum: earliestRefreshExpiry })) });
 type ClaudeAccess = typeof ClaudeAccess.Type;
 export type ClaudeCredentials = ClaudeAccess & { readonly refreshExpiresAt?: number };
 const decodeClaudeAccess = Schema.decodeUnknownOption(ClaudeAccess);
