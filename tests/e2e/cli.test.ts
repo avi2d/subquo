@@ -62,7 +62,7 @@ async function invoke(
   return { exit, stdout, stderr };
 }
 
-test("refresh and compare do not reuse one Claude login for both enrolled accounts", async () => {
+test("refresh and compare keep Claude logins separate and do not show a missing expiry as a healthy login", async () => {
   const { root, config, profile, env } = await setup();
   try {
     const second = join(root, "second");
@@ -102,12 +102,12 @@ test("refresh and compare do not reuse one Claude login for both enrolled accoun
       version: "subquo.v1",
       accounts: [
         { id: "example-first", loginEndsInDays: 7, observation: { windows: [{ percentLeft: 75 }] } },
-        { id: "example-second", observation: { windows: [{ percentLeft: 60 }] } },
+        { id: "example-second", loginEndsInDays: null, observation: { windows: [{ percentLeft: 60 }] } },
       ],
     });
-    expect(json.stdout.match(/"loginEndsInDays"/gu)).toHaveLength(1);
     const read = await invoke(env, ["read"]);
     expect(read.stdout).toContain("example-first: fresh, login ends in 7 days");
+    expect(read.stdout).toContain("example-second: fresh, login end unknown");
 
     const capturedAt = new Date().toISOString();
     const baseline = (name: string, utilization_pct: number) => ({
