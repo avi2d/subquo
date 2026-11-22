@@ -4,8 +4,8 @@ kind: explanation
 # The quota snapshot design
 
 subquo splits collecting quota from reading it, so a tool that picks an account reads one local file and never waits on a vendor.
-The snapshot schema and its checks are in place.
-Every number about the commands below is a starting target, not a measurement.
+The commands read without another quota reader, so the staged switch can retire those readers later.
+The time limits below are targets, not measurements on a live provider.
 
 ## Two commands
 
@@ -15,7 +15,8 @@ It reads accounts side by side under a concurrency cap.
 Each account has a 5 second limit, and the whole refresh has a 10 second limit, so one slow vendor times out alone.
 It replaces the snapshot file whole, so a killed refresh never leaves half a file.
 When another refresh holds the lock, it skips its turn instead of queueing.
-On a rate limit it waits for the retry time the vendor sends.
+A collector that meets a rate limit gives that account the safe code without a retry in the same pass.
+Each collector sends the account's own saved login only to that vendor's usage address and forgets it after the read.
 
 `subquo read --json` prints the last complete snapshot.
 It never contacts the network, waits on a lock or triggers a refresh.
@@ -70,8 +71,9 @@ A limit with an unknown value leaves the headroom unknown.
 ## Logins
 
 Each vendor's own tool signs in, saves the login and renews it.
-subquo reads a saved login into memory, sends it only to that vendor's usage address and forgets it after the read.
-It never renews a login, because two programs rewriting one login at once can sign out a running worker.
+A collector reads only the login named for that account or the usage entry matched to it.
+subquo never writes a login, because two programs rewriting one login at once can sign out a running worker.
+The separate renewal command asks the vendor to renew an expired login only when you confirm that the account is idle.
 An idle account whose short pass expired reads as login unchecked, which is not proof of a sign-out.
 An account whose renewal fails reads as login needed, and only its owner signing in again clears it.
 
@@ -99,9 +101,9 @@ The design sources leave these open:
 - Whether OpenCode Go still issues a pasted key, and which login store an owner's Go account uses.
 - How long the Claude, ChatGPT and OpenCode usage addresses keep their response shapes, since none of them is a published contract.
 - Which refresh interval the vendors' rate limits allow, after measuring them.
-- Where the account list lives and which format it takes.
 - Whether the repository stays named subquo, since the design reports call the tool subscription-quota.
 
 ## Related topics
 
 - [Vision](../VISION.md)
+- [Run subquo beside your quota tools](shadow-run.md)

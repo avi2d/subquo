@@ -19,11 +19,14 @@ Do not commit the file or copy logins between machines.
 | `login.store` | `file` or `macos-keychain`. Use `macos-keychain` only for Claude Code on macOS. |
 | `login.path` | For `file`, the absolute path to the provider's login file. |
 | `login.config_dir` | For `macos-keychain`, the absolute path Claude Code uses as its configuration directory for this account. |
-| `login.service` | For `macos-keychain`, the service name of the account's Keychain item, not its value. |
+| `login.service` | For `macos-keychain`, the service name of the account's Keychain item, not its value. Use the exact item name, either `Claude Code-credentials` or its `Claude Code-credentials-<hash>` form. |
 
 Each `login` table lists only the fields for its store.
 On Linux or Windows Subsystem for Linux, use `file` for Claude Code.
 For a custom Claude Code directory on macOS, match the exact directory spelling in `CLAUDE_CONFIG_DIR`.
+For a Claude Code file, use its existing `.credentials.json` file.
+For a Codex file, use its existing `auth.json` file.
+For OpenCode Go, use the existing `opencode/auth.json` under its data directory.
 
 ## Example
 
@@ -33,7 +36,7 @@ Replace the example IDs and locators with your own.
 [[accounts]]
 id = "example-claude-one"
 provider = "claude"
-login = { store = "macos-keychain", config_dir = "/path/to/example/claude-one", service = "example-keychain-service" }
+login = { store = "macos-keychain", config_dir = "/path/to/example/claude-one", service = "Claude Code-credentials" }
 
 [[accounts]]
 id = "example-claude-two"
