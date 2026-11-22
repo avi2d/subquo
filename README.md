@@ -3,7 +3,8 @@
 subquo reads how much quota is left on each paid AI coding subscription a person names, such as Claude, OpenAI Codex and OpenCode Go accounts.
 It writes each account's windows, percent left and reset times into one snapshot file.
 A scheduler, a dashboard or a launch guard then reads the same data.
-The repository holds the checks setup, the vision, the design and the account list format, and no reader code yet.
+The snapshot format and its checks are in place.
+The commands and provider readers are not in the repository.
 
 ## Before you begin
 
@@ -42,6 +43,12 @@ To run the checks a pull request runs:
    bun run typecheck
    ```
 
+1. Run the tests:
+
+   ```sh
+   bun run test
+   ```
+
 A passing lint ends with `checks-lint: <count> gate(s) pass`.
 
 ## Where things are
@@ -52,6 +59,9 @@ A passing lint ends with `checks-lint: <count> gate(s) pass`.
 | `docs/design.md` | the reader and snapshot design, with its open questions |
 | `docs/accounts.md` | the private account list format and a copyable example |
 | `docs/stage-1-findings.md` | what the login checks show about expiry, setup tokens and renewal |
+| `src/index.ts` | the snapshot schema and the helpers that read, write and check its age |
+| `tests/unit/` | tests |
+| `tests/fixtures/snapshots/` | sample snapshots with made-up accounts |
 | `templates/` | the page templates a new doc starts from |
 | `.github/workflows/` | the CI callers the checks kit writes |
 

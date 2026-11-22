@@ -17,7 +17,11 @@
     "lint": "oxlint && checks-lint",
     "typecheck": "tsc --noEmit && effect-tsgo diagnostics --project tsconfig.json --format text --strict",
     "test": "checks-test",
-    "test:fast": "checks-test --changed"
+    "test:fast": "checks-test --changed",
+    "test:unit": "checks-test --tier=unit"
+  },
+  "dependencies": {
+    "effect": "4.0.0"
   },
   "devDependencies": {
     "@avi2dg/checks": "0.111.0",

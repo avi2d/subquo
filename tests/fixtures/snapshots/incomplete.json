@@ -1,0 +1,66 @@
+{
+  "version": "subquo.v1",
+  "writtenAt": "2030-01-01T00:01:00.000Z",
+  "accounts": [
+    {
+      "id": "sample-claude",
+      "provider": "claude",
+      "observation": {
+        "status": "stale",
+        "observedAt": "2030-01-01T00:00:00.000Z",
+        "source": "provider",
+        "windows": [
+          {
+            "id": "five-hour",
+            "scope": "account",
+            "percentLeft": 40,
+            "resetsAt": "2030-01-01T05:00:00.000Z"
+          }
+        ],
+        "code": "timeout"
+      }
+    },
+    {
+      "id": "sample-codex",
+      "provider": "codex",
+      "observation": {
+        "status": "unavailable",
+        "code": "rate_limited"
+      }
+    },
+    {
+      "id": "sample-opencode",
+      "provider": "opencode-go",
+      "observation": {
+        "status": "unavailable",
+        "code": "auth_unverified"
+      }
+    },
+    {
+      "id": "sample-backup",
+      "provider": "claude",
+      "observation": {
+        "status": "unavailable",
+        "code": "auth_required"
+      }
+    },
+    {
+      "id": "sample-partial",
+      "provider": "codex",
+      "observation": {
+        "status": "fresh",
+        "observedAt": "2030-01-01T00:00:00.000Z",
+        "source": "provider",
+        "validUntil": "2030-01-01T00:02:00.000Z",
+        "windows": [
+          {
+            "id": "weekly",
+            "scope": "account",
+            "percentLeft": null,
+            "resetsAt": null
+          }
+        ]
+      }
+    }
+  ]
+}

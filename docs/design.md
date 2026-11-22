@@ -29,22 +29,35 @@ Two logins of one subscription count once only when the vendor's identity proves
 
 ## The snapshot
 
-The snapshot names its schema version, the time it was written and every enrolled account.
-An enrolled account that cannot be read stays in the snapshot with its reason, rather than disappearing.
+The JSON snapshot holds a `version` of `subquo.v1`, a `writtenAt` time, and an array of `accounts`.
+Each account has a unique `id`, a `provider`, and an `observation`.
+An enrolled account that cannot be read stays in the snapshot with its reason.
 
-| Observation | What it holds | What a reader may do with it |
+| Observation `status` | What it holds | What a reader may do with it |
 | --- | --- | --- |
-| `fresh` | observation time, valid-until time, source and at least one window | treat it as evidence for a pick, not as permission |
-| `stale` | the last observation and its windows, with a safe failure code | show it with its date, never pick from it |
-| `unavailable` | a safe code such as `timeout`, `rate_limited`, `auth_required`, `auth_unverified` or `unsupported` | claim no capacity |
+| `fresh` | `observedAt`, `validUntil`, `source`, and at least one window | treat a current reading with known values as evidence for a pick, not as permission |
+| `stale` | `observedAt`, `source`, the last observed windows, and a safe `code` or `null` | show it with `observedAt`, never pick from it |
+| `unavailable` | a safe `code`: `timeout`, `rate_limited`, `auth_required`, or `auth_unverified` | claim no capacity |
 
-Each window has an ID and a scope, a percent left and a reset time.
-The percent and the reset are each either measured or marked unknown.
+The two auth codes mean login needed and login unchecked, respectively.
+A stale reading without a failed refresh has a `null` code.
+A window holds `id`, `scope`, `percentLeft`, and `resetsAt`.
 A measured percent is a finite number from 0 to 100.
+An unknown percent or reset is `null`.
 A reset time is never filled in from a login's expiry or a plan's name.
+Times are UTC strings with millisecond precision, such as `2030-01-01T00:00:00.000Z`.
 
-A reading stays fresh for at most 120 seconds, and never past a window's reset time.
+The deadline is the earlier of 120 seconds after `observedAt` and the first known window reset.
+At the deadline, the reading becomes stale.
+Recheck the reading's age at the time of use, even if the file marks it `fresh`.
+The pick helper rejects unknown percentages and resets.
 After a reset, subquo waits for a new reading rather than assuming the window is full again.
+
+The account ID comes from the private account list.
+Window IDs and scopes are labels the reader assigns, not text taken from vendor replies.
+These labels use 1 to 64 lowercase letters, digits, hyphens, or underscores and start with a letter or digit.
+The snapshot codec drops fields not in the schema and returns `InvalidSnapshot` without the input if validation fails.
+See the [fresh sample](../tests/fixtures/snapshots/fresh.json) and the [sample with missing readings](../tests/fixtures/snapshots/incomplete.json).
 
 ## Headroom is the smallest limit
 
