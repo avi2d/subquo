@@ -1,0 +1,54 @@
+{
+  "version": "subquo.v1",
+  "writtenAt": "2030-01-01T00:00:30.000Z",
+  "accounts": [
+    {
+      "id": "sample-claude",
+      "provider": "claude",
+      "observation": {
+        "status": "fresh",
+        "observedAt": "2030-01-01T00:00:00.000Z",
+        "source": "provider",
+        "validUntil": "2030-01-01T00:02:00.000Z",
+        "windows": [
+          {
+            "id": "five-hour",
+            "scope": "account",
+            "percentLeft": 40,
+            "resetsAt": "2030-01-01T05:00:00.000Z"
+          },
+          {
+            "id": "weekly",
+            "scope": "account",
+            "percentLeft": 12,
+            "resetsAt": "2030-01-08T00:00:00.000Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sample-codex",
+      "provider": "codex",
+      "observation": {
+        "status": "fresh",
+        "observedAt": "2030-01-01T00:00:10.000Z",
+        "source": "provider",
+        "validUntil": "2030-01-01T00:01:00.000Z",
+        "windows": [
+          {
+            "id": "weekly",
+            "scope": "account",
+            "percentLeft": 100,
+            "resetsAt": "2030-01-08T00:00:00.000Z"
+          },
+          {
+            "id": "five-hour",
+            "scope": "account",
+            "percentLeft": 0,
+            "resetsAt": "2030-01-01T00:01:00.000Z"
+          }
+        ]
+      }
+    }
+  ]
+}
