@@ -4,7 +4,7 @@ kind: explanation
 # The quota snapshot design
 
 subquo splits collecting quota from reading it, so a tool that picks an account reads one local file and never waits on a vendor.
-The commands replace the quota tools as the reader, so no other quota reader is required on the machine.
+The commands read without another quota reader, so the staged switch can retire those readers later.
 The time limits below are targets, not measurements on a live provider.
 
 ## Two commands

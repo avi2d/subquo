@@ -36,7 +36,7 @@ Replace the example IDs and locators with your own.
 [[accounts]]
 id = "example-claude-one"
 provider = "claude"
-login = { store = "macos-keychain", config_dir = "/path/to/example/claude-one", service = "example-keychain-service" }
+login = { store = "macos-keychain", config_dir = "/path/to/example/claude-one", service = "Claude Code-credentials" }
 
 [[accounts]]
 id = "example-claude-two"
