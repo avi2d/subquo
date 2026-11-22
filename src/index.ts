@@ -17,7 +17,7 @@ const Window = Schema.Struct({
 });
 const measurement = {
   observedAt: Timestamp,
-  source: Schema.Literals(["provider", "clauth", "quota-axi", "local"]),
+  source: Schema.Literal("provider"),
   windows: Schema.NonEmptyArray(Window),
 };
 const Fresh = Schema.Struct({
