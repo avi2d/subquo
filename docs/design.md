@@ -7,7 +7,7 @@ subquo splits collecting quota from reading it, so a tool that picks an account 
 The commands read without another quota reader, so the staged switch can retire those readers later.
 The time limits below are targets, not measurements on a live provider.
 
-## Two commands
+## Commands
 
 `subquo refresh` reads every account the account list names and writes a new snapshot.
 A scheduler the machine already has runs it, every 60 seconds to start.
@@ -21,6 +21,10 @@ Each collector sends the account's own saved login only to that vendor's usage a
 `subquo read --json` prints the last complete snapshot.
 It never contacts the network, waits on a lock or triggers a refresh.
 Its deadline is one second, with 200 milliseconds as the normal target.
+`subquo read` shows the same snapshot as text and checks quota freshness again when it prints.
+
+`subquo compare` compares the saved Claude readings with clauth status JSON from standard input.
+It displays both readings for each window and fails if any row is worse or lacks a current value to check against.
 
 ## The account list
 
@@ -49,6 +53,17 @@ An unknown percent or reset is `null`.
 A reset time is never filled in from a login's expiry or a plan's name.
 Times are UTC strings with millisecond precision, such as `2030-01-01T00:00:00.000Z`.
 
+A Claude account with a known sign-in expiry within the next seven days has a `loginEndsInDays` field.
+It counts days from `writtenAt`, rounded up.
+A sign-in that ended at or before `writtenAt` has `loginEndsInDays` of `0`, and its quota observation stays as read.
+The collector uses the saved refresh-token expiry, not the shorter access-token expiry.
+A usable expiry is a whole number of epoch milliseconds from 2020-01-01 UTC to the last date JavaScript can hold.
+A value in seconds is never read as a 1970 date.
+If subquo parses the saved login but its refresh-token expiry is missing or unusable, `loginEndsInDays` is `null`.
+If the login is missing or cannot be parsed, or the vendor answers that it needs a new sign-in, the account has no `loginEndsInDays` field.
+Its observation already shows that state.
+A countdown is not proof that the sign-in still works.
+
 The deadline is the earlier of 120 seconds after `observedAt` and the first known window reset.
 At the deadline, the reading becomes stale.
 Recheck the reading's age at the time of use, even if the file marks it `fresh`.
@@ -67,6 +82,7 @@ An account's usable headroom is the smallest of the limits that apply to a job, 
 With 40% left in a five-hour window and 12% left in a weekly window, the headroom is 12%.
 A window that covers only one kind of work, such as code review, does not limit other jobs.
 A limit with an unknown value leaves the headroom unknown.
+A Claude model limit whose model subquo cannot name makes the account read as login unchecked, so the limit is never dropped.
 
 ## Logins
 

@@ -1,11 +1,13 @@
 #!/usr/bin/env -S bun --no-env-file
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { Effect, Path, Schema, Stdio, Stream } from "effect";
+import { ByteSize, Clock, Effect, Option, Path, Schema, Stdio, Stream } from "effect";
 import { loadAccounts } from "./accounts";
 import { readAccount } from "./collectors";
 import { collectSnapshot } from "./collect";
+import { compareClaude, parseClAuthStatus } from "./compare";
+import { type Snapshot, observationAt, serializeSnapshot } from "./index";
 import { renewIdleLogin } from "./renewal";
-import { readSnapshotJson, withStateLock, writeSnapshot } from "./storage";
+import { readSnapshot, withStateLock, writeSnapshot } from "./storage";
 
 class CommandFailed extends Schema.TaggedError<CommandFailed>()("CommandFailed", {}) {}
 
@@ -13,6 +15,28 @@ const writeLine = Effect.fnUntraced(function*(line: string, output: "stdout" | "
   const stdio = yield* Stdio.Stdio;
   yield* Stream.make(`${line}\n`).pipe(Stream.run(stdio[output]()));
 });
+
+function loginNotice(days: Snapshot["accounts"][number]["loginEndsInDays"]): string {
+  if (days === undefined) return "";
+  if (days === null) return ", login end unknown";
+  if (days === 0) return ", login has ended";
+  return days === 1 ? ", login ends in 1 day" : `, login ends in ${days} days`;
+}
+
+function renderAccount(account: Snapshot["accounts"][number], now: number): string[] {
+  const observation = observationAt(account.observation, now);
+  const reason = observation.status === "fresh" || observation.code === null ? "" : ` (${observation.code})`;
+  const heading = `${account.id}: ${observation.status}${reason}${loginNotice(account.loginEndsInDays)}`;
+  if (observation.status === "unavailable") return [heading];
+  return [heading, ...observation.windows.map(({ id, percentLeft, resetsAt }) => {
+    const percent = percentLeft === null ? "unknown" : `${percentLeft}% left`;
+    return `  ${id}: ${percent}, resets at ${resetsAt ?? "an unknown time"}`;
+  })];
+}
+
+function renderSnapshot(snapshot: Snapshot, now: number): string {
+  return [`Snapshot written at ${snapshot.writtenAt}`, ...snapshot.accounts.flatMap((account) => renderAccount(account, now))].join("\n");
+}
 
 const statePaths = Effect.fnUntraced(function*(home: string, stateHome: string | undefined) {
   const path = yield* Path.Path;
@@ -26,6 +50,66 @@ const statePaths = Effect.fnUntraced(function*(home: string, stateHome: string |
   };
 });
 
+const compare = Effect.fnUntraced(function*(files: { readonly accounts: string; readonly snapshot: string }) {
+  const stdio = yield* Stdio.Stdio;
+  const inputFailed = () => new CommandFailed();
+  const readClauth = stdio.stdin.pipe(
+    Stream.mapError(inputFailed),
+    Stream.limitBytes(ByteSize.bytes(1_048_576), () => Stream.fail(inputFailed())),
+    Stream.decodeText,
+    Stream.mkString,
+    Effect.flatMap(parseClAuthStatus),
+    Effect.timeoutOrElse({ duration: 5_000, orElse: () => Effect.fail(inputFailed()) }),
+  );
+  const terminal = yield* stdio.stdinIsTerminal;
+  const clauth = yield* (terminal ? Effect.fail(inputFailed()) : readClauth).pipe(
+    Effect.tapError(() => writeLine("Could not read clauth status. Pipe clauth status --json --all into subquo compare.", "stderr")),
+  );
+  const { accounts } = yield* loadAccounts(files.accounts).pipe(
+    Effect.tapError(() => writeLine("Could not read the subquo account list.", "stderr")),
+  );
+  const enrolled = accounts.filter(({ provider }) => provider === "claude");
+  if (enrolled.length === 0) {
+    yield* writeLine("No Claude accounts in the subquo account list.", "stderr");
+    return yield* new CommandFailed();
+  }
+  const snapshot = yield* readSnapshot(files.snapshot).pipe(Effect.option);
+  const now = yield* Clock.currentTimeMillis;
+  const result = compareClaude(enrolled, Option.getOrUndefined(snapshot), clauth, now);
+  yield* writeLine(result.text, "stdout");
+  if (!result.matched) return yield* new CommandFailed();
+});
+
+const renew = Effect.fnUntraced(function*(
+  files: { readonly accounts: string; readonly renewalLock: string },
+  id: string | undefined,
+  env: { readonly HOME: string; readonly PATH: string | undefined },
+) {
+  const { accounts } = yield* loadAccounts(files.accounts).pipe(
+    Effect.tapError(() => writeLine("Could not read the subquo account list.", "stderr")),
+  );
+  const account = accounts.find((entry) => entry.id === id);
+  if (account === undefined) {
+    yield* writeLine("Not an enrolled subquo account.", "stderr");
+    return yield* new CommandFailed();
+  }
+  const result = yield* withStateLock(files.renewalLock, Effect.gen(function*() {
+    yield* Effect.sleep(45_000).pipe(
+      Effect.andThen(writeLine("The vendor tool is still running. Let it finish before you retry.", "stderr")),
+      Effect.orElseSucceed(() => undefined),
+      Effect.interruptible,
+      Effect.forkScoped,
+    );
+    return yield* Effect.uninterruptible(renewIdleLogin(account, env));
+  }).pipe(Effect.scoped));
+  if (result.status === "busy") {
+    yield* writeLine("A renewal is already running.", "stderr");
+    return yield* new CommandFailed();
+  }
+  yield* writeLine(result.value, "stdout");
+  if (result.value === "auth_required" || result.value === "auth_unverified") return yield* new CommandFailed();
+});
+
 const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefined, executablePath: string | undefined) {
   const stdio = yield* Stdio.Stdio;
   const args = yield* stdio.args;
@@ -37,12 +121,16 @@ const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefi
   }
   const files = yield* statePaths(home, stateHome);
 
-  if (command === "read" && flag === "--json" && args.length === 2) {
-    const json = yield* readSnapshotJson(files.snapshot).pipe(
+  if (command === "read" && (args.length === 1 || (flag === "--json" && args.length === 2))) {
+    const snapshot = yield* readSnapshot(files.snapshot).pipe(
       Effect.tapError(() => writeLine("No readable subquo snapshot.", "stderr")),
     );
-    return yield* writeLine(json, "stdout");
+    const now = yield* Clock.currentTimeMillis;
+    const output = flag === "--json" ? yield* serializeSnapshot(snapshot) : renderSnapshot(snapshot, now);
+    return yield* writeLine(output, "stdout");
   }
+
+  if (command === "compare" && args.length === 1) return yield* compare(files);
 
   if (command === "refresh" && args.length === 1) {
     return yield* withStateLock(files.lock, Effect.gen(function*() {
@@ -55,33 +143,10 @@ const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefi
   }
 
   if (command === "refresh" && flag === "--renew-idle" && args.length === 3) {
-    const { accounts } = yield* loadAccounts(files.accounts).pipe(
-      Effect.tapError(() => writeLine("Could not read the subquo account list.", "stderr")),
-    );
-    const account = accounts.find((entry) => entry.id === id);
-    if (account === undefined) {
-      yield* writeLine("Not an enrolled subquo account.", "stderr");
-      return yield* new CommandFailed();
-    }
-    const result = yield* withStateLock(files.renewalLock, Effect.gen(function*() {
-      yield* Effect.sleep(45_000).pipe(
-        Effect.andThen(writeLine("The vendor tool is still running. Let it finish before you retry.", "stderr")),
-        Effect.orElseSucceed(() => undefined),
-        Effect.interruptible,
-        Effect.forkScoped,
-      );
-      return yield* Effect.uninterruptible(renewIdleLogin(account, { HOME: home, PATH: executablePath }));
-    }).pipe(Effect.scoped));
-    if (result.status === "busy") {
-      yield* writeLine("A renewal is already running.", "stderr");
-      return yield* new CommandFailed();
-    }
-    yield* writeLine(result.value, "stdout");
-    if (result.value === "auth_required" || result.value === "auth_unverified") return yield* new CommandFailed();
-    return;
+    return yield* renew(files, id, { HOME: home, PATH: executablePath });
   }
 
-  yield* writeLine("Usage: subquo refresh [--renew-idle <account>] | subquo read --json", "stderr");
+  yield* writeLine("Usage: subquo refresh [--renew-idle <account>] | subquo read [--json] | subquo compare", "stderr");
   return yield* new CommandFailed();
 });
 

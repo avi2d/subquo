@@ -96,6 +96,60 @@ test("a scoped Claude reply keeps the model window out of the shared weekly wind
   ]);
 });
 
+test("a Claude reply with an unmapped scoped limit reads as unchecked rather than dropping that limit", async () => {
+  const shared = [
+    { kind: "session", percent: 22, resets_at: reset },
+    { kind: "weekly_all", percent: 41, resets_at: reset },
+  ];
+  for (const scope of [{ model: { id: null, display_name: "Mystery" } }, { model: { id: "claude-opus-sonnet" } }, null]) {
+    const payload = { limits: [...shared, { kind: "weekly_scoped", percent: 100, resets_at: reset, scope }] };
+    expect(parseClaudeUsagePayload(payload)).toBeUndefined();
+    const fetchImpl: FetchImpl = () => Promise.resolve(jsonResponse(payload));
+    const reading = await Effect.runPromise(requestClaudeReading({ accessToken: "live-token" }, fetchImpl, now));
+    expect(reading).toEqual({ code: "auth_unverified" });
+  }
+});
+
+test("an unrelated Claude limit kind does not block the model windows", () => {
+  const windows = parseClaudeUsagePayload({
+    limits: [
+      { kind: "session", percent: 22, resets_at: reset },
+      { kind: "fake_unrelated_kind", percent: 90, resets_at: reset },
+    ],
+  });
+  expect(windows).toEqual([{ id: "five-hour", scope: "all", percentLeft: 78, resetsAt: reset }]);
+});
+
+test("a Claude kind-only reply neither skips the new session limit nor drops the legacy weekly fallback", () => {
+  const windows = parseClaudeUsagePayload({
+    limits: [{ kind: "session", percent: 25, resets_at: reset }],
+    five_hour: { utilization: 99, resets_at: reset },
+    seven_day: { utilization: 80, resets_at: reset },
+  });
+  expect(windows).toEqual([
+    { id: "five-hour", scope: "all", percentLeft: 75, resetsAt: reset },
+    { id: "weekly", scope: "all", percentLeft: 20, resetsAt: reset },
+  ]);
+});
+
+test("a malformed refresh expiry does not poison a usable Claude access token", () => {
+  expect(parseClaudeCredentials(JSON.stringify({
+    claudeAiOauth: { accessToken: "fake-access", expiresAt: now + 2_000, refreshTokenExpiresAt: "not a date" },
+  }))).toEqual({ accessToken: "fake-access", expiresAt: now + 2_000 });
+});
+
+test("a Claude refresh expiry in epoch seconds, before 2020 or outside the Date range reads as unknown, not as a date", () => {
+  const credentials = (refreshTokenExpiresAt: number) => parseClaudeCredentials(JSON.stringify({
+    claudeAiOauth: { accessToken: "fake-access", refreshTokenExpiresAt },
+  }));
+  for (const unusable of [1_900_000_000, Date.UTC(2019, 11, 31, 23, 59, 59, 999), 8.64e15 + 1, now + 0.5]) {
+    expect(credentials(unusable)).toEqual({ accessToken: "fake-access" });
+  }
+  for (const usable of [Date.UTC(2020, 0, 1), 8.64e15]) {
+    expect(credentials(usable)).toEqual({ accessToken: "fake-access", refreshExpiresAt: usable });
+  }
+});
+
 test("a legacy Claude reply keeps its sonnet window instead of dropping it", async () => {
   const windows = parseClaudeUsagePayload({
     five_hour: { utilization: 18, resets_at: reset },
