@@ -1,6 +1,6 @@
 import { Clock, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import type { EnrolledAccount } from "./accounts";
+import { claudeDefaultKeychainService, validClaudeKeychainService, type EnrolledAccount } from "./accounts";
 
 const ClaudeLogin = Schema.Struct({
   claudeAiOauth: Schema.Struct({
@@ -50,8 +50,7 @@ const readKeychain = Effect.fnUntraced(function*(
   login: Extract<EnrolledAccount["login"], { readonly store: "macos-keychain" }>,
   env: Record<string, string | undefined>,
 ) {
-  const hash = Bun.CryptoHasher.hash("sha256", login.config_dir.normalize("NFC"), "hex").slice(0, 8);
-  if (login.service !== `Claude Code-credentials-${hash}`) return yield* unchecked();
+  if (!validClaudeKeychainService(login)) return yield* unchecked();
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const command = ChildProcess.make("/usr/bin/security", ["find-generic-password", "-s", login.service, "-w"], {
     env, stdin: "ignore", stderr: "ignore", killSignal: "SIGKILL",
@@ -64,10 +63,13 @@ const readKeychain = Effect.fnUntraced(function*(
   })).pipe(Effect.timeoutOrElse({ duration: 5_000, orElse: () => Effect.fail(unchecked()) }));
 });
 
-const runClaude = Effect.fnUntraced(function*(env: Record<string, string | undefined>, configDir: string) {
+const runClaude = Effect.fnUntraced(function*(env: Record<string, string | undefined>, configDir: string | undefined) {
   const child = yield* Effect.try({
     try: () => Bun.spawn(["claude", "doctor"], {
-      env: { ...env, CLAUDE_CONFIG_DIR: configDir }, stdin: "ignore", stdout: "ignore", stderr: "ignore",
+      env: configDir === undefined ? env : { ...env, CLAUDE_CONFIG_DIR: configDir },
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
     }),
     catch: unchecked,
   });
@@ -124,6 +126,12 @@ const runCodex = Effect.fnUntraced(function*(env: Record<string, string | undefi
   return (yield* Effect.promise(() => child.exited)) === 0 && accepted;
 });
 
+function vendorDir(login: EnrolledAccount["login"], provider: EnrolledAccount["provider"], fileDir: string): string | undefined {
+  if (login.store === "file") return fileDir;
+  if (provider === "claude" && login.service === claudeDefaultKeychainService) return undefined;
+  return login.config_dir;
+}
+
 type RenewalResult = "not_needed" | "not_supported" | "renewed" | "auth_required" | "auth_unverified";
 
 export const renewIdleLogin = Effect.fnUntraced(function*(
@@ -144,10 +152,10 @@ export const renewIdleLogin = Effect.fnUntraced(function*(
   if (expires === undefined) return "auth_unverified" satisfies RenewalResult;
   if (expires > (yield* Clock.currentTimeMillis)) return "not_needed" satisfies RenewalResult;
 
-  const configDir = login.store === "file" ? path.dirname(login.path) : login.config_dir;
+  const fileDir = login.store === "file" ? path.dirname(login.path) : login.config_dir;
   const accepted = account.provider === "claude"
-    ? (yield* runClaude(env, configDir)) === 0
-    : yield* runCodex(env, configDir);
+    ? (yield* runClaude(env, vendorDir(login, account.provider, fileDir))) === 0
+    : yield* runCodex(env, vendorDir(login, account.provider, fileDir) ?? fileDir);
   const after = yield* read.pipe(Effect.map((json) => renewalExpiry(account.provider, json)), Effect.option);
   if (Option.isNone(after) || after.value === undefined) return "auth_required" satisfies RenewalResult;
   return accepted && after.value > (yield* Clock.currentTimeMillis)

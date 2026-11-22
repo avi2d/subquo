@@ -5,65 +5,91 @@ import { join } from "node:path";
 
 const cli = new URL("../../src/cli.ts", import.meta.url).pathname;
 
-test("read prints the saved quota even when the account list and collector are gone", async () => {
+async function setup() {
   const root = await mkdtemp(join(tmpdir(), "subquo-test-"));
+  const config = join(root, ".config", "subquo");
+  const profile = join(root, "profile");
+  await mkdir(config, { recursive: true });
+  await mkdir(profile, { recursive: true });
+  const env = { HOME: root, PATH: process.env.PATH ?? "", XDG_STATE_HOME: join(root, "state") };
+  return { root, config, profile, env };
+}
+
+test("read prints the saved quota even when the account list and collector are gone", async () => {
+  const { root, config, profile, env } = await setup();
   try {
-    const config = join(root, ".config", "subquo");
-    const profile = join(root, "profile");
-    const bin = join(root, "bin");
-    await Promise.all([config, profile, bin].map((path) => mkdir(path, { recursive: true })));
     const login = join(profile, "auth.json");
     const accounts = join(config, "accounts.toml");
     const canary = crypto.randomUUID();
-    await writeFile(login, JSON.stringify({ tokens: { access_token: canary } }));
+    await writeFile(login, JSON.stringify({ tokens: { account_id: canary } }));
     await writeFile(accounts, [
       "[[accounts]]",
-      'id = "example"',
-      'provider = "codex"',
-      `login = { store = "file", path = ${JSON.stringify(login)} }`,
+      "id = \"example\"",
+      "provider = \"codex\"",
+      "login = { store = \"file\", path = " + JSON.stringify(login) + " }",
     ].join("\n"), { mode: 0o600 });
-
-    const collector = join(bin, "quota-axi");
-    const observedAt = new Date().toISOString();
-    const resetsAt = new Date(Date.parse(observedAt) + 3_600_000).toISOString();
-    const reply = JSON.stringify({
-      providers: [{
-        provider: "codex",
-        source: "oauth",
-        state: { status: "fresh", stale: false, refreshedAt: observedAt },
-        windows: [{ id: "five_hour", kind: "session", percentRemaining: 40, resetsAt }],
-        ignored: canary,
-      }],
-    });
-    await writeFile(collector, [
-      "#!/bin/sh",
-      '[ "$CODEX_HOME" = "$HOME/profile" ] || exit 1',
-      '[ "$*" = "quota --provider codex --json --full --no-credential-refresh --profile-only" ] || exit 1',
-      `printf '%s\\n' '${reply}'`,
-    ].join("\n"), { mode: 0o700 });
-
-    const env = { HOME: root, PATH: bin, XDG_STATE_HOME: join(root, "state") };
+    const missing = join(profile, "gone.json");
     const refresh = Bun.spawn([process.execPath, "--no-env-file", cli, "refresh"], { env, stderr: "pipe" });
     expect(await refresh.exited).toBe(0);
     expect(await new Response(refresh.stderr).text()).toBe("");
-    await Promise.all([accounts, login, collector].map((path) => rm(path)));
+    await writeFile(accounts, [
+      "[[accounts]]",
+      "id = \"example\"",
+      "provider = \"codex\"",
+      "login = { store = \"file\", path = " + JSON.stringify(missing) + " }",
+    ].join("\n"), { mode: 0o600 });
     const read = Bun.spawn([process.execPath, "--no-env-file", cli, "read", "--json"], { env, stderr: "pipe", stdout: "pipe" });
     const [exit, stdout, stderr] = await Promise.all([read.exited, new Response(read.stdout).text(), new Response(read.stderr).text()]);
     expect(exit).toBe(0);
     expect(stderr).toBe("");
     expect(stdout).not.toContain(canary);
-    expect(JSON.parse(stdout)).toMatchObject({
-      version: "subquo.v1",
-      accounts: [{
-        id: "example",
-        provider: "codex",
-        observation: {
-          status: "fresh",
-          observedAt,
-          windows: [{ id: "five-hour", scope: "all", percentLeft: 40, resetsAt }],
-        },
-      }],
-    });
+    expect(JSON.parse(stdout)).toMatchObject({ accounts: [{ id: "example", observation: { status: "unavailable" } }] });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a named account whose login is missing reads as login needed", async () => {
+  const { root, config, env } = await setup();
+  try {
+    const accounts = join(config, "accounts.toml");
+    await writeFile(accounts, [
+      "[[accounts]]",
+      "id = \"gone\"",
+      "provider = \"codex\"",
+      "login = { store = \"file\", path = \"/nonexistent/auth.json\" }",
+    ].join("\n"), { mode: 0o600 });
+    const refresh = Bun.spawn([process.execPath, "--no-env-file", cli, "refresh"], { env, stderr: "pipe" });
+    expect(await refresh.exited).toBe(0);
+    const read = Bun.spawn([process.execPath, "--no-env-file", cli, "read", "--json"], { env, stderr: "pipe", stdout: "pipe" });
+    const [exit, stdout] = await Promise.all([read.exited, new Response(read.stdout).text()]);
+    expect(exit).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({ accounts: [{ id: "gone", observation: { status: "unavailable", code: "auth_required" } }] });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an expired saved pass reads as unchecked without proving a sign-out", async () => {
+  const { root, config, profile, env } = await setup();
+  try {
+    const login = join(profile, ".credentials.json");
+    const accounts = join(config, "accounts.toml");
+    const canary = crypto.randomUUID();
+    await writeFile(login, JSON.stringify({ claudeAiOauth: { accessToken: canary, expiresAt: 1000, refreshToken: canary } }));
+    await writeFile(accounts, [
+      "[[accounts]]",
+      "id = \"old\"",
+      "provider = \"claude\"",
+      "login = { store = \"file\", path = " + JSON.stringify(login) + " }",
+    ].join("\n"), { mode: 0o600 });
+    const refresh = Bun.spawn([process.execPath, "--no-env-file", cli, "refresh"], { env, stderr: "pipe" });
+    expect(await refresh.exited).toBe(0);
+    const read = Bun.spawn([process.execPath, "--no-env-file", cli, "read", "--json"], { env, stderr: "pipe", stdout: "pipe" });
+    const [exit, stdout] = await Promise.all([read.exited, new Response(read.stdout).text()]);
+    expect(exit).toBe(0);
+    expect(stdout).not.toContain(canary);
+    expect(JSON.parse(stdout)).toMatchObject({ accounts: [{ id: "old", observation: { status: "unavailable", code: "auth_unverified" } }] });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

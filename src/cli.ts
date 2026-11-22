@@ -2,7 +2,7 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Effect, Path, Schema, Stdio, Stream } from "effect";
 import { loadAccounts } from "./accounts";
-import { readAccount } from "./bridges";
+import { readAccount } from "./collectors";
 import { collectSnapshot } from "./collect";
 import { renewIdleLogin } from "./renewal";
 import { readSnapshotJson, withStateLock, writeSnapshot } from "./storage";
@@ -48,7 +48,7 @@ const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefi
     return yield* withStateLock(files.lock, Effect.gen(function*() {
       const { accounts } = yield* loadAccounts(files.accounts);
       const snapshot = yield* collectSnapshot(accounts.map((account) => ({
-        id: account.id, provider: account.provider, read: readAccount(account, home, executablePath),
+        id: account.id, provider: account.provider, read: readAccount(account),
       })));
       yield* writeSnapshot(files.snapshot, snapshot);
     })).pipe(Effect.tapError(() => writeLine("Could not refresh subquo. Check the account list and state directory.", "stderr")));

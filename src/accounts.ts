@@ -18,8 +18,18 @@ const Keychain = Schema.Struct({
   store: Schema.Literal("macos-keychain"),
   config_dir: AbsolutePath,
   service: Schema.NonEmptyString,
-  clauth_profile: Schema.NonEmptyString,
 });
+
+export const claudeDefaultKeychainService = "Claude Code-credentials";
+
+export function validClaudeKeychainService(login: {
+  readonly config_dir: string;
+  readonly service: string;
+}): boolean {
+  if (login.service === claudeDefaultKeychainService) return true;
+  const hash = Bun.CryptoHasher.hash("sha256", login.config_dir.normalize("NFC"), "hex").slice(0, 8);
+  return login.service === `${claudeDefaultKeychainService}-${hash}`;
+}
 
 const AccountEntry = Schema.Union([
   Schema.Struct({ id: Label, provider: Schema.Literal("claude"), login: Schema.Union([ClaudeFile, Keychain]) }),

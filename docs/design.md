@@ -4,7 +4,7 @@ kind: explanation
 # The quota snapshot design
 
 subquo splits collecting quota from reading it, so a tool that picks an account reads one local file and never waits on a vendor.
-The commands can run beside the quota tools without changing any reader.
+The commands replace the quota tools as the reader, so no other quota reader is required on the machine.
 The time limits below are targets, not measurements on a live provider.
 
 ## Two commands
@@ -15,9 +15,8 @@ It reads accounts side by side under a concurrency cap.
 Each account has a 5 second limit, and the whole refresh has a 10 second limit, so one slow vendor times out alone.
 It replaces the snapshot file whole, so a killed refresh never leaves half a file.
 When another refresh holds the lock, it skips its turn instead of queueing.
-A bridge that reports a rate limit gives that account the safe code without a retry in the same pass.
-On macOS, the Claude bridge takes dated readings from clauth.
-For other logins, quota-axi reads the provider with renewal turned off.
+A collector that meets a rate limit gives that account the safe code without a retry in the same pass.
+Each collector sends the account's own saved login only to that vendor's usage address and forgets it after the read.
 
 `subquo read --json` prints the last complete snapshot.
 It never contacts the network, waits on a lock or triggers a refresh.
@@ -72,7 +71,7 @@ A limit with an unknown value leaves the headroom unknown.
 ## Logins
 
 Each vendor's own tool signs in, saves the login and renews it.
-A bridge reads only the login named for that account or the usage entry matched to it.
+A collector reads only the login named for that account or the usage entry matched to it.
 subquo never writes a login, because two programs rewriting one login at once can sign out a running worker.
 The separate renewal command asks the vendor to renew an expired login only when you confirm that the account is idle.
 An idle account whose short pass expired reads as login unchecked, which is not proof of a sign-out.
