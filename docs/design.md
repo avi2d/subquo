@@ -4,7 +4,8 @@ kind: explanation
 # The quota snapshot design
 
 subquo splits collecting quota from reading it, so a tool that picks an account reads one local file and never waits on a vendor.
-No reader code exists yet, and every number below is a starting target, not a measurement.
+The snapshot schema and its checks are in place.
+Every number about the commands below is a starting target, not a measurement.
 
 ## Two commands
 
