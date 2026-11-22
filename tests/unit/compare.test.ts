@@ -10,9 +10,8 @@ const fiveHour = { id: "five-hour", scope: "all", percentLeft: 75, resetsAt } sa
 const enrolled = { id: "example", clauth_profile: "fake-profile" };
 const window = { label: "5h", utilization_pct: 25, resets_at: resetsAt };
 
-function reading(...quotas: QuotaWindow[]): Account {
-  const windows = quotas.length === 0 ? [fiveHour] : quotas;
-  return { id: enrolled.id, provider: "claude", observation: measuredObservation(observedAt, windows, now) };
+function reading(first: QuotaWindow = fiveHour, ...rest: QuotaWindow[]): Account {
+  return { id: enrolled.id, provider: "claude", observation: measuredObservation(observedAt, [first, ...rest], now) };
 }
 
 function decodeReference(
