@@ -63,7 +63,7 @@ A passing lint ends with `checks-lint: <count> gate(s) pass`.
 | `docs/accounts.md` | the private account list format and a copyable example |
 | `docs/stage-1-findings.md` | what the login checks show about expiry, setup tokens and renewal |
 | `src/index.ts` | the snapshot schema and the helpers that read, write and check its age |
-| `src/cli.ts` | the `refresh` and `read` commands |
+| `src/cli.ts` | the `refresh`, `read`, and `compare` commands |
 | `tests/unit/` | tests |
 | `tests/fixtures/snapshots/` | sample snapshots with made-up accounts |
 | `templates/` | the page templates a new doc starts from |

@@ -19,7 +19,7 @@ const ClaudeUsageUrl = "https://api.anthropic.com/api/oauth/usage";
 const CodexUsageUrls = ["https://chatgpt.com/backend-api/wham/usage", "https://chatgpt.com/backend-api/codex/usage"];
 const OpenCodeUsageUrl = "https://opencode.ai/zen/go/v1/usage";
 
-type FetchInit = { readonly headers: Record<string, string>; readonly signal: AbortSignal };
+type FetchInit = { readonly headers: Record<string, string>; readonly signal: AbortSignal; readonly redirect: "error" };
 export type FetchImpl = (url: string, init: FetchInit) => Promise<Response>;
 
 type FetchOutcome =
@@ -41,15 +41,17 @@ function aborted(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
 }
 
-function attemptFetch(url: string, headers: Record<string, string>, fetchImpl: FetchImpl): Promise<FetchOutcome> {
-  return fetchImpl(url, { headers, signal: AbortSignal.timeout(4500) }).then(
+function attemptFetch(url: string, init: FetchInit, fetchImpl: FetchImpl): Promise<FetchOutcome> {
+  return fetchImpl(url, init).then(
     (response) => (response.status === 429 ? { kind: "limited" } : { kind: "response", response }),
     (error: unknown) => (aborted(error) ? { kind: "timedOut" } : { kind: "unverified" }),
   );
 }
 
 const fetchOutcome = (url: string, headers: Record<string, string>, fetchImpl: FetchImpl) =>
-  Effect.promise(() => attemptFetch(url, headers, fetchImpl));
+  Effect.promise((signal) => attemptFetch(url, {
+    headers, signal: AbortSignal.any([signal, AbortSignal.timeout(4_500)]), redirect: "error",
+  }, fetchImpl));
 
 const readBody = Effect.fnUntraced(function*(response: Response) {
   const text = yield* Effect.promise(() => response.text().then((value) => value, () => undefined));
@@ -159,19 +161,16 @@ const readClaudeAccount = Effect.fnUntraced(function*(
   env: Record<string, string | undefined>,
   now: number,
 ) {
-  if (account.login.store === "macos-keychain") {
-    if (process.platform !== "darwin") return unverified;
-    const content = yield* readKeychainContent(account.login, env).pipe(Effect.orElseSucceed(() => undefined as string | undefined));
-    if (content === undefined) return unverified;
-    const credentials = parseClaudeCredentials(content);
-    if (!credentials) return unverified;
-    return yield* requestClaudeReading(credentials, fetchImpl, now).pipe(Effect.orElseSucceed(() => unverified));
-  }
-  const content = yield* readNamedFile(account.login.path);
-  if (typeof content !== "string") return content;
+  if (account.login.store === "macos-keychain" && process.platform !== "darwin") return unverified;
+  const content = yield* (account.login.store === "file"
+    ? readNamedFile(account.login.path)
+    : readKeychainContent(account.login, env));
+  if (typeof content !== "string") return content ?? unverified;
   const credentials = parseClaudeCredentials(content);
   if (!credentials) return unverified;
-  return yield* requestClaudeReading(credentials, fetchImpl, now).pipe(Effect.orElseSucceed(() => unverified));
+  const reading = yield* requestClaudeReading(credentials, fetchImpl, now);
+  if (credentials.refreshExpiresAt === undefined || ("code" in reading && reading.code === "auth_required")) return reading;
+  return { ...reading, loginExpiresAt: credentials.refreshExpiresAt } satisfies Reading;
 });
 
 const readCodexAccount = Effect.fnUntraced(function*(

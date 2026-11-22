@@ -16,7 +16,9 @@ const Window = Schema.Struct({
   resetsAt: Schema.NullOr(Timestamp),
 });
 const Provider = Schema.Literals(["claude", "codex", "opencode-go"]);
-const Windows = Schema.NonEmptyArray(Window);
+const Windows = Schema.NonEmptyArray(Window).check(
+  Schema.makeFilter((windows) => new Set(windows.map(({ id }) => id)).size === windows.length),
+);
 
 function deadlineAt(observedAt: string, windows: typeof Windows.Type): number {
   return windows.reduce(
@@ -52,11 +54,19 @@ const Unavailable = Schema.Struct({
 const Observation = Schema.Union([Fresh, Stale, Unavailable]);
 type FreshObservation = typeof Fresh.Type;
 type Observation = typeof Observation.Type;
+const dayMs = 86_400_000;
+const loginWarningDays = 7;
 const Account = Schema.Struct({
   id: Label,
   provider: Provider,
   observation: Observation,
+  loginEndsInDays: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: loginWarningDays }))),
 });
+
+export function loginWarningAt(expiresAt: number, now: number): number | undefined {
+  const days = Math.ceil((expiresAt - now) / dayMs);
+  return days >= 1 && days <= loginWarningDays ? days : undefined;
+}
 
 function isFreshAt(observation: FreshObservation, now: number): boolean {
   return Date.parse(observation.observedAt) <= now && now < Date.parse(observation.validUntil);

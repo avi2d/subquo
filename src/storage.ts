@@ -8,13 +8,12 @@ class StateUnavailable extends Schema.TaggedError<StateUnavailable>()("StateUnav
 const snapshotUnavailable = () => new SnapshotUnavailable();
 const stateUnavailable = () => new StateUnavailable();
 
-export const readSnapshotJson = Effect.fnUntraced(function*(file: string) {
+export const readSnapshot = Effect.fnUntraced(function*(file: string) {
   const fs = yield* FileSystem.FileSystem;
   const info = yield* fs.stat(file).pipe(Effect.mapError(snapshotUnavailable));
   if (info.type !== "File") return yield* snapshotUnavailable();
   const json = yield* fs.readFileString(file).pipe(Effect.mapError(snapshotUnavailable));
-  const snapshot = yield* parseSnapshot(json);
-  return yield* serializeSnapshot(snapshot);
+  return yield* parseSnapshot(json);
 }, Effect.timeoutOrElse({ duration: 900, orElse: () => Effect.fail(snapshotUnavailable()) }));
 
 export const writeSnapshot = Effect.fnUntraced(function*(file: string, snapshot: Snapshot) {

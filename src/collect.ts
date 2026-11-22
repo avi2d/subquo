@@ -1,16 +1,17 @@
 import { Clock, Effect } from "effect";
-import { type Account, type FailureCode, type Snapshot, type Windows, measuredObservation } from "./index";
+import { type Account, type FailureCode, type Snapshot, type Windows, loginWarningAt, measuredObservation } from "./index";
 
-export type Reading =
+export type Reading = { readonly loginExpiresAt?: number } & (
   | { readonly observedAt: string; readonly windows: typeof Windows.Type }
-  | { readonly code: FailureCode };
+  | { readonly code: FailureCode }
+);
 
 type Collector<R> = Pick<Account, "id" | "provider"> & { readonly read: Effect.Effect<Reading, never, R> };
 
 const accountLimitMs = 5_000;
 const cycleLimitMs = 10_000;
 const maxConcurrentAccounts = 8;
-const timedOut = Effect.succeed({ code: "timeout" } satisfies Reading);
+const timedOut = Effect.succeed<Reading>({ code: "timeout" });
 
 export const collectSnapshot = Effect.fnUntraced(function*<R>(collectors: readonly Collector<R>[]) {
   const deadline = (yield* Clock.currentTimeMillis) + cycleLimitMs;
@@ -18,7 +19,7 @@ export const collectSnapshot = Effect.fnUntraced(function*<R>(collectors: readon
     Effect.gen(function*() {
       const remaining = deadline - (yield* Clock.currentTimeMillis);
       const reading = remaining <= 0 ? yield* timedOut : yield* read.pipe(
-        Effect.catchDefect(() => Effect.succeed({ code: "auth_unverified" } satisfies Reading)),
+        Effect.catchDefect(() => Effect.succeed<Reading>({ code: "auth_unverified" })),
         Effect.timeoutOrElse({ duration: Math.min(remaining, accountLimitMs), orElse: () => timedOut }),
       );
       return { id, provider, reading };
@@ -28,12 +29,16 @@ export const collectSnapshot = Effect.fnUntraced(function*<R>(collectors: readon
   return {
     version: "subquo.v1",
     writtenAt: new Date(now).toISOString(),
-    accounts: readings.map(({ id, provider, reading }) => ({
-      id,
-      provider,
-      observation: "code" in reading
-        ? { status: "unavailable", code: reading.code }
-        : measuredObservation(reading.observedAt, reading.windows, now),
-    })),
+    accounts: readings.map(({ id, provider, reading }): Account => {
+      const days = reading.loginExpiresAt === undefined ? undefined : loginWarningAt(reading.loginExpiresAt, now);
+      return {
+        id,
+        provider,
+        observation: "code" in reading
+          ? { status: "unavailable", code: reading.code }
+          : measuredObservation(reading.observedAt, reading.windows, now),
+        ...(days === undefined ? {} : { loginEndsInDays: days }),
+      };
+    }),
   } satisfies Snapshot;
 });

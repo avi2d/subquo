@@ -96,6 +96,24 @@ test("a scoped Claude reply keeps the model window out of the shared weekly wind
   ]);
 });
 
+test("a Claude kind-only reply neither skips the new session limit nor drops the legacy weekly fallback", () => {
+  const windows = parseClaudeUsagePayload({
+    limits: [{ kind: "session", percent: 25, resets_at: reset }],
+    five_hour: { utilization: 99, resets_at: reset },
+    seven_day: { utilization: 80, resets_at: reset },
+  });
+  expect(windows).toEqual([
+    { id: "five-hour", scope: "all", percentLeft: 75, resetsAt: reset },
+    { id: "weekly", scope: "all", percentLeft: 20, resetsAt: reset },
+  ]);
+});
+
+test("a malformed refresh expiry does not poison a usable Claude access token", () => {
+  expect(parseClaudeCredentials(JSON.stringify({
+    claudeAiOauth: { accessToken: "fake-access", expiresAt: now + 2_000, refreshTokenExpiresAt: "not a date" },
+  }))).toEqual({ accessToken: "fake-access", expiresAt: now + 2_000 });
+});
+
 test("a legacy Claude reply keeps its sonnet window instead of dropping it", async () => {
   const windows = parseClaudeUsagePayload({
     five_hour: { utilization: 18, resets_at: reset },

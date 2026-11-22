@@ -41,7 +41,6 @@ function epochOrIsoToIso(value: unknown): string | null | undefined {
 export function measuredAt(now: string, windows: readonly QuotaWindow[]): Reading {
   const validated = decodeWindows(windows);
   if (Option.isNone(validated)) return { code: "auth_unverified" };
-  if (new Set(windows.map((window) => window.id)).size !== windows.length) return { code: "auth_unverified" };
   return { observedAt: now, windows: validated.value };
 }
 function claudeWindow(used: unknown, resetsAt: unknown, id: QuotaWindow["id"], scope: QuotaWindow["scope"]): QuotaWindow | undefined {
@@ -51,68 +50,56 @@ function claudeWindow(used: unknown, resetsAt: unknown, id: QuotaWindow["id"], s
   return { id, scope, percentLeft: 100 - percent, resetsAt: reset };
 }
 
-function claudeModelScope(name: string): Pick<QuotaWindow, "id" | "scope"> | undefined {
-  if (name.includes("opus")) return { id: "opus-weekly", scope: "opus" };
-  if (name.includes("sonnet")) return { id: "sonnet-weekly", scope: "sonnet" };
-  if (name.includes("haiku")) return { id: "haiku-weekly", scope: "haiku" };
-  if (name.includes("fable")) return { id: "fable-weekly", scope: "fable" };
-  return undefined;
+export function claudeModelScope(name: string): Pick<QuotaWindow, "id" | "scope"> | undefined {
+  const families = name.toLowerCase().split(/[^a-z0-9]+/u);
+  const known = (["opus", "sonnet", "haiku", "fable"] as const).filter((family) => families.includes(family));
+  const [scope] = known;
+  return known.length === 1 ? { id: `${scope}-weekly`, scope } : undefined;
 }
 
-function claudeScopedWindow(entry: unknown): QuotaWindow | undefined {
-  if (!isRecord(entry)) return undefined;
-  if (typeof entry["percent"] !== "number") return undefined;
-  const resetsAt = entry["resets_at"] ?? entry["reset_at"] ?? null;
-  const percent = entry["percent"];
-  const scope = isRecord(entry["scope"]) ? entry["scope"] : undefined;
-  const model = scope && isRecord(scope["model"]) ? scope["model"] : undefined;
-  const display = model ? model["display_name"] : undefined;
-  const modelId = model ? model["id"] : undefined;
-  const name = (typeof display === "string" ? display : typeof modelId === "string" ? modelId : "").toLowerCase();
-  if (name.length > 0) {
-    const identity = claudeModelScope(name);
-    if (!identity) return undefined;
-    return claudeWindow(percent, resetsAt, identity.id, identity.scope);
-  }
-  if (entry["group"] === "session") return claudeWindow(percent, resetsAt, "five-hour", "all");
-  if (entry["group"] === "weekly") return claudeWindow(percent, resetsAt, "weekly", "all");
-  return undefined;
+function claudeLimitIdentity(entry: Record<string, unknown>): Pick<QuotaWindow, "id" | "scope"> | undefined {
+  if (entry["kind"] === "session") return { id: "five-hour", scope: "all" };
+  if (entry["kind"] === "weekly_all") return { id: "weekly", scope: "all" };
+  if (entry["kind"] !== "weekly_scoped") return undefined;
+  const scope = entry["scope"];
+  if (!isRecord(scope) || !isRecord(scope["model"])) return undefined;
+  const name = scope["model"]["display_name"] ?? scope["model"]["id"];
+  return typeof name === "string" ? claudeModelScope(name) : undefined;
 }
 
-function claudeTopLevelWindows(raw: Record<string, unknown>): QuotaWindow[] | undefined {
+function addClaudeLegacyWindows(raw: Record<string, unknown>, windows: Map<string, QuotaWindow>): boolean {
   const fields: Array<[string, QuotaWindow["id"], QuotaWindow["scope"]]> = [
     ["five_hour", "five-hour", "all"],
     ["seven_day", "weekly", "all"],
     ["seven_day_opus", "opus-weekly", "opus"],
     ["seven_day_sonnet", "sonnet-weekly", "sonnet"],
   ];
-  const windows: QuotaWindow[] = [];
   for (const [field, id, scope] of fields) {
     const entry = raw[field];
-    if (entry === undefined || entry === null) continue;
-    if (!isRecord(entry)) return undefined;
-    const window = claudeWindow(entry["utilization"], entry["resets_at"] ?? entry["reset_at"] ?? null, id, scope);
-    if (!window) return undefined;
-    windows.push(window);
+    if (windows.has(id) || entry === undefined || entry === null) continue;
+    if (!isRecord(entry)) return false;
+    const window = claudeWindow(entry["utilization"], entry["resets_at"] ?? entry["reset_at"], id, scope);
+    if (!window) return false;
+    windows.set(id, window);
   }
-  return windows.length > 0 ? windows : undefined;
+  return true;
 }
 
 export function parseClaudeUsagePayload(raw: unknown): QuotaWindow[] | undefined {
   if (!isRecord(raw)) return undefined;
-  const scoped = raw["limits"];
-  if (scoped !== undefined && scoped !== null && !Array.isArray(scoped)) return undefined;
-  if (Array.isArray(scoped)) {
-    if (scoped.length === 0) return undefined;
-    const windows: QuotaWindow[] = [];
-    for (const entry of scoped) {
-      const window = claudeScopedWindow(entry);
-      if (!window) return undefined;
-      windows.push(window);
-    }
-    return windows;
+  const limits = raw["limits"] ?? [];
+  if (!Array.isArray(limits)) return undefined;
+  const windows = new Map<string, QuotaWindow>();
+  for (const entry of limits) {
+    if (!isRecord(entry)) return undefined;
+    const identity = claudeLimitIdentity(entry);
+    if (!identity) continue;
+    const window = claudeWindow(entry["percent"], entry["resets_at"] ?? entry["reset_at"], identity.id, identity.scope);
+    if (!window || windows.has(window.id)) return undefined;
+    windows.set(window.id, window);
   }
-  return claudeTopLevelWindows(raw);
+  if (!addClaudeLegacyWindows(raw, windows) || windows.size === 0) return undefined;
+  return [...windows.values()];
 }
 function relativeReset(value: unknown, now: number): string | null | undefined {
   if (value === undefined || value === null) return null;
@@ -338,7 +325,15 @@ export function parseOpenCodeUsagePayload(raw: unknown, now: number): QuotaWindo
   }
   return windows.length > 0 ? windows : undefined;
 }
-export type ClaudeCredentials = { readonly accessToken: string; readonly expiresAt?: number };
+const ClaudeAccess = Schema.Struct({
+  accessToken: Schema.NonEmptyString,
+  expiresAt: Schema.optionalKey(Schema.Finite),
+});
+const RefreshExpiry = Schema.Struct({ refreshTokenExpiresAt: Schema.Int.check(Schema.isGreaterThan(0)) });
+type ClaudeAccess = typeof ClaudeAccess.Type;
+export type ClaudeCredentials = ClaudeAccess & { readonly refreshExpiresAt?: number };
+const decodeClaudeAccess = Schema.decodeUnknownOption(ClaudeAccess);
+const decodeRefreshExpiry = Schema.decodeUnknownOption(RefreshExpiry);
 export type CodexCredentials = { readonly accessToken: string; readonly accountId?: string; readonly expiresAt?: number };
 
 function decodeJwtExp(token: string): number | undefined {
@@ -355,12 +350,18 @@ function decodeJwtExp(token: string): number | undefined {
 
 function claudeCredentialsFrom(value: unknown): ClaudeCredentials | undefined {
   if (!isRecord(value)) return undefined;
-  const oauth = isRecord(value["claudeAiOauth"]) ? value["claudeAiOauth"] : value;
-  const token = oauth["accessToken"] ?? oauth["access_token"];
-  if (typeof token !== "string" || token.length === 0) return undefined;
+  const savedOAuth = value["claudeAiOauth"];
+  const oauth = isRecord(savedOAuth) ? savedOAuth : value;
   const expiresAt = oauth["expiresAt"];
-  if (expiresAt !== undefined && (typeof expiresAt !== "number" || !Number.isFinite(expiresAt))) return undefined;
-  return expiresAt === undefined ? { accessToken: token } : { accessToken: token, expiresAt };
+  const access = decodeClaudeAccess({
+    accessToken: oauth["accessToken"] ?? oauth["access_token"],
+    ...(expiresAt === undefined ? {} : { expiresAt }),
+  });
+  if (Option.isNone(access)) return undefined;
+  const expiry = decodeRefreshExpiry(savedOAuth);
+  return Option.isSome(expiry)
+    ? { ...access.value, refreshExpiresAt: expiry.value.refreshTokenExpiresAt }
+    : access.value;
 }
 
 function codexCredentialsFrom(value: unknown): CodexCredentials | undefined {
