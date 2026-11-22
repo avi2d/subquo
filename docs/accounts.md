@@ -27,7 +27,6 @@ For a custom Claude Code directory on macOS, match the exact directory spelling 
 For a Claude Code file, use its existing `.credentials.json` file.
 For a Codex file, use its existing `auth.json` file.
 For OpenCode Go, use the existing `opencode/auth.json` under its data directory.
-If the OpenCode file also holds an `opencode` entry, subquo leaves the reading unchecked rather than risk using that entry.
 
 ## Example
 

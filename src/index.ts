@@ -90,13 +90,12 @@ export function measuredObservation(
   observedAt: string,
   windows: typeof Windows.Type,
   now: number,
-  staleCode?: FailureCode | null,
 ): Observation {
   if (Date.parse(observedAt) > now) return { status: "unavailable", code: "auth_unverified" };
   const validUntil = deadlineAt(observedAt, windows);
   const reading = { observedAt, source: "provider" as const, windows };
-  if (staleCode !== undefined || validUntil <= now) {
-    return { status: "stale", ...reading, code: staleCode ?? null };
+  if (validUntil <= now) {
+    return { status: "stale", ...reading, code: null };
   }
   const fresh = makeFresh({ status: "fresh", ...reading, validUntil: new Date(validUntil).toISOString() });
   return Option.getOrElse(fresh, () => ({ status: "unavailable", code: "auth_unverified" }) as const);

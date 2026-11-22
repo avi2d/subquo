@@ -28,6 +28,10 @@ type FetchOutcome =
   | { readonly kind: "unverified" }
   | { readonly kind: "response"; readonly response: Response };
 
+function expiredAtRejection(expiresAt: number | undefined, rejectedAt: number): boolean {
+  return expiresAt !== undefined && expiresAt <= rejectedAt;
+}
+
 const required: Reading = { code: "auth_required" };
 const limited: Reading = { code: "rate_limited" };
 const timedOut: Reading = { code: "timeout" };
@@ -65,7 +69,10 @@ export const requestClaudeReading = Effect.fnUntraced(function*(
     accept: "application/json",
   }, fetchImpl);
   if (outcome.kind !== "response") return outcome.kind === "limited" ? limited : outcome.kind === "timedOut" ? timedOut : unverified;
-  if (outcome.response.status === 401) return required;
+  if (outcome.response.status === 401) {
+    const rejectedAt = yield* Clock.currentTimeMillis;
+    return expiredAtRejection(credentials.expiresAt, rejectedAt) ? unverified : required;
+  }
   if (!outcome.response.ok) return unverified;
   const text = yield* readBody(outcome.response);
   if (text === undefined) return unverified;
@@ -92,7 +99,7 @@ const attemptCodexEndpoint = Effect.fnUntraced(function*(
   if (!outcome.response.ok) return { kind: "next" } as const;
   const text = yield* readBody(outcome.response);
   if (text === undefined) return { kind: "next" } as const;
-  const windows = parseCodexUsagePayload(parseJson(text));
+  const windows = parseCodexUsagePayload(parseJson(text), now);
   if (!windows) return { kind: "next" } as const;
   return { kind: "done", reading: measuredAt(new Date(now).toISOString(), windows) } as const;
 });
@@ -107,7 +114,11 @@ export const requestCodexReading = Effect.fnUntraced(function*(
     if (attempt.kind === "done") return attempt.reading;
     if (attempt.kind === "rejected") rejected = true;
   }
-  return rejected ? required : unverified;
+  if (rejected) {
+    const rejectedAt = yield* Clock.currentTimeMillis;
+    return expiredAtRejection(credentials.expiresAt, rejectedAt) ? unverified : required;
+  }
+  return unverified;
 });
 
 export const requestOpenCodeReading = Effect.fnUntraced(function*(
@@ -121,7 +132,7 @@ export const requestOpenCodeReading = Effect.fnUntraced(function*(
   if (!outcome.response.ok) return unverified;
   const text = yield* readBody(outcome.response);
   if (text === undefined) return unverified;
-  const windows = parseOpenCodeUsagePayload(parseJson(text));
+  const windows = parseOpenCodeUsagePayload(parseJson(text), now);
   if (!windows) return unverified;
   return measuredAt(new Date(now).toISOString(), windows);
 });

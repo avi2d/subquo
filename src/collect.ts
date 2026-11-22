@@ -2,7 +2,7 @@ import { Clock, Effect } from "effect";
 import { type Account, type FailureCode, type Snapshot, type Windows, measuredObservation } from "./index";
 
 export type Reading =
-  | { readonly observedAt: string; readonly windows: typeof Windows.Type; readonly staleCode?: FailureCode | null }
+  | { readonly observedAt: string; readonly windows: typeof Windows.Type }
   | { readonly code: FailureCode };
 
 type Collector<R> = Pick<Account, "id" | "provider"> & { readonly read: Effect.Effect<Reading, never, R> };
@@ -33,7 +33,7 @@ export const collectSnapshot = Effect.fnUntraced(function*<R>(collectors: readon
       provider,
       observation: "code" in reading
         ? { status: "unavailable", code: reading.code }
-        : measuredObservation(reading.observedAt, reading.windows, now, reading.staleCode),
+        : measuredObservation(reading.observedAt, reading.windows, now),
     })),
   } satisfies Snapshot;
 });

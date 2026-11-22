@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { validClaudeKeychainService } from "../../src/accounts";
 import type { FetchImpl } from "../../src/collectors";
 import { requestClaudeReading, requestCodexReading, requestOpenCodeReading } from "../../src/collectors";
@@ -23,6 +24,12 @@ function statusResponse(status: number): Response {
   return new Response("", { status });
 }
 
+function fakeJwt(expSeconds: number): string {
+  const payload = Buffer.from(JSON.stringify({ exp: expSeconds }), "utf8").toString("base64url");
+  return "header." + payload + ".signature";
+}
+
+
 test("a Claude utilization reply leaves the remainder, not the usage, as percent left", async () => {
   const windows = parseClaudeUsagePayload({ five_hour: { utilization: 60, resets_at: reset } });
   expect(windows).toEqual([{ id: "five-hour", scope: "all", percentLeft: 40, resetsAt: reset }]);
@@ -39,6 +46,16 @@ test("a rejected Claude pass reads as login needed, not unchecked", async () => 
   const fetchImpl: FetchImpl = () => Promise.resolve(statusResponse(401));
   const reading = await Effect.runPromise(requestClaudeReading({ accessToken: "live-token" }, fetchImpl, now));
   expect(reading).toEqual({ code: "auth_required" });
+});
+
+test("a rejected pass that expired mid-read does not read as login needed", async () => {
+  const fetchImpl: FetchImpl = () => Promise.resolve(statusResponse(401));
+  const program = Effect.gen(function*() {
+    yield* TestClock.setTime(now + 5000);
+    return yield* requestClaudeReading({ accessToken: "live-token", expiresAt: now + 1000 }, fetchImpl, now);
+  }).pipe(Effect.provide(TestClock.layer()));
+  const reading = await Effect.runPromise(program);
+  expect(reading).toEqual({ code: "auth_unverified" });
 });
 
 test("a Claude rate limit reads as limited, not unchecked", async () => {
@@ -64,18 +81,125 @@ test("a fresh Claude reply carries its windows with the read time", async () => 
   });
 });
 
+test("a scoped Claude reply keeps the model window out of the shared weekly window", async () => {
+  const windows = parseClaudeUsagePayload({
+    limits: [
+      { kind: "session", group: "session", percent: 22, resets_at: reset, scope: null, is_active: false },
+      { kind: "weekly_all", group: "weekly", percent: 41, resets_at: reset, scope: null, is_active: false },
+      { kind: "weekly_scoped", group: "weekly", percent: 63, resets_at: reset, scope: { model: { id: null, display_name: "Fable" }, surface: null }, is_active: true },
+    ],
+  });
+  expect(windows).toEqual([
+    { id: "five-hour", scope: "all", percentLeft: 78, resetsAt: reset },
+    { id: "weekly", scope: "all", percentLeft: 59, resetsAt: reset },
+    { id: "fable-weekly", scope: "fable", percentLeft: 37, resetsAt: reset },
+  ]);
+});
+
+test("a legacy Claude reply keeps its sonnet window instead of dropping it", async () => {
+  const windows = parseClaudeUsagePayload({
+    five_hour: { utilization: 18, resets_at: reset },
+    seven_day: { utilization: 36, reset_at: reset },
+    seven_day_opus: { utilization: 7, resets_at: reset },
+    seven_day_sonnet: { utilization: 50, resets_at: reset },
+  });
+  expect(windows).toEqual([
+    { id: "five-hour", scope: "all", percentLeft: 82, resetsAt: reset },
+    { id: "weekly", scope: "all", percentLeft: 64, resetsAt: reset },
+    { id: "opus-weekly", scope: "opus", percentLeft: 93, resetsAt: reset },
+    { id: "sonnet-weekly", scope: "sonnet", percentLeft: 50, resetsAt: reset },
+  ]);
+});
+
+test("a legacy Claude reply with a missing model bucket keeps the windows it has", async () => {
+  const windows = parseClaudeUsagePayload({
+    five_hour: { utilization: 18, resets_at: reset },
+    seven_day_opus: null,
+  });
+  expect(windows).toEqual([{ id: "five-hour", scope: "all", percentLeft: 82, resetsAt: reset }]);
+});
+
+test("a Claude window without a reset keeps a null reset instead of dropping the account", async () => {
+  const windows = parseClaudeUsagePayload({ five_hour: { utilization: 60 } });
+  expect(windows).toEqual([{ id: "five-hour", scope: "all", percentLeft: 40, resetsAt: null }]);
+});
+
 test("a Codex usage reply keeps code review out of the shared limits", async () => {
   const windows = parseCodexUsagePayload({
     rate_limit: {
-      primary_window: { used_percent: 88, reset_at: reset },
-      secondary_window: { used_percent: 60, reset_at: reset },
+      primary_window: { used_percent: 88, reset_at: reset, limit_window_seconds: 18000 },
+      secondary_window: { used_percent: 60, reset_at: reset, limit_window_seconds: 604800 },
     },
-    code_review_rate_limit: { primary_window: { used_percent: 33, reset_at: reset } },
-  });
+    code_review_rate_limit: { primary_window: { used_percent: 33, reset_at: reset, limit_window_seconds: 18000 } },
+  }, now);
   expect(windows).toEqual([
     { id: "five-hour", scope: "all", percentLeft: 12, resetsAt: reset },
     { id: "weekly", scope: "all", percentLeft: 40, resetsAt: reset },
     { id: "review-five-hour", scope: "code-review", percentLeft: 67, resetsAt: reset },
+  ]);
+});
+
+test("a Codex primary window lasting a week reads as weekly, not five-hour", async () => {
+  const windows = parseCodexUsagePayload({
+    rate_limit: { primary_window: { used_percent: 29, reset_at: reset, limit_window_seconds: 604800 } },
+  }, now);
+  expect(windows).toEqual([{ id: "weekly", scope: "all", percentLeft: 71, resetsAt: reset }]);
+});
+
+test("a Codex review window lasting a week reads as review-weekly, not review-five-hour", async () => {
+  const windows = parseCodexUsagePayload({
+    code_review_rate_limit: {
+      primary_window: { used_percent: 5, reset_at: reset, limit_window_seconds: 604800 },
+      secondary_window: { used_percent: 12, reset_at: reset, limit_window_seconds: 18000 },
+    },
+  }, now);
+  expect(windows).toEqual([
+    { id: "review-weekly", scope: "code-review", percentLeft: 95, resetsAt: reset },
+    { id: "review-five-hour", scope: "code-review", percentLeft: 88, resetsAt: reset },
+  ]);
+});
+
+test("a Codex reply with relative resets counts them from the read time", async () => {
+  const windows = parseCodexUsagePayload({
+    rate_limit: {
+      primary_window: { used_percent: 29, reset_at: 1783374300, limit_window_seconds: 18000 },
+      secondary_window: { used_percent: 57, reset_after_seconds: 3600 },
+    },
+  }, now);
+  expect(windows).toEqual([
+    { id: "five-hour", scope: "all", percentLeft: 71, resetsAt: new Date(1783374300 * 1000).toISOString() },
+    { id: "weekly", scope: "all", percentLeft: 43, resetsAt: "2030-01-01T01:00:00.000Z" },
+  ]);
+});
+
+test("a Codex reply with an exhausted model bucket keeps that bucket, not just the shared windows", async () => {
+  const windows = parseCodexUsagePayload({
+    rate_limit: {
+      primary_window: { used_percent: 15, reset_at: 1783374300, limit_window_seconds: 18000 },
+      secondary_window: { used_percent: 48, reset_after_seconds: 3600 },
+    },
+    code_review_rate_limit: {
+      primary_window: { used_percent: 5, reset_after_seconds: 1800 },
+      secondary_window: { used_percent: 12, reset_after_seconds: 7200 },
+    },
+    additional_rate_limits: [
+      {
+        limit_name: "GPT-Preview-Spark",
+        metered_feature: "codex_previewfeature",
+        rate_limit: {
+          primary_window: { used_percent: 33, reset_after_seconds: 1200 },
+          secondary_window: { used_percent: 70, reset_after_seconds: 5400 },
+        },
+      },
+    ],
+  }, now);
+  expect(windows).toEqual([
+    { id: "five-hour", scope: "all", percentLeft: 85, resetsAt: new Date(1783374300 * 1000).toISOString() },
+    { id: "weekly", scope: "all", percentLeft: 52, resetsAt: "2030-01-01T01:00:00.000Z" },
+    { id: "review-five-hour", scope: "code-review", percentLeft: 95, resetsAt: "2030-01-01T00:30:00.000Z" },
+    { id: "review-weekly", scope: "code-review", percentLeft: 88, resetsAt: "2030-01-01T02:00:00.000Z" },
+    { id: "model-codex_previewfeature-5h", scope: "codex_previewfeature", percentLeft: 67, resetsAt: "2030-01-01T00:20:00.000Z" },
+    { id: "model-codex_previewfeature-7d", scope: "codex_previewfeature", percentLeft: 30, resetsAt: "2030-01-01T01:30:00.000Z" },
   ]);
 });
 
@@ -90,6 +214,22 @@ test("a Codex rejection on every usage address reads as login needed", async () 
   expect(calls.length).toBe(2);
 });
 
+test("a rejected Codex pass that expired mid-read still probes both addresses before reading unchecked", async () => {
+  const calls: string[] = [];
+  const fetchImpl: FetchImpl = (url) => {
+    calls.push(url);
+    return Promise.resolve(statusResponse(401));
+  };
+  const credentials = { accessToken: fakeJwt(now / 1000 + 1) };
+  const program = Effect.gen(function*() {
+    yield* TestClock.setTime(now + 5000);
+    return yield* requestCodexReading(credentials, fetchImpl, now);
+  }).pipe(Effect.provide(TestClock.layer()));
+  const reading = await Effect.runPromise(program);
+  expect(calls.length).toBe(2);
+  expect(reading).toEqual({ code: "auth_unverified" });
+});
+
 test("a Codex rate limit on the first address stops without trying the second", async () => {
   const calls: string[] = [];
   const fetchImpl: FetchImpl = (url) => {
@@ -101,8 +241,8 @@ test("a Codex rate limit on the first address stops without trying the second", 
   expect(calls.length).toBe(1);
 });
 
-test("an OpenCode file holding another entry never selects that entry", async () => {
-  expect(parseOpenCodeKey(JSON.stringify({ "opencode-go": { key: "go-key" }, opencode: { key: "other" } }))).toBeUndefined();
+test("an unrelated OpenCode entry does not block the enrolled Go key", async () => {
+  expect(parseOpenCodeKey(JSON.stringify({ "opencode-go": { key: "go-key" }, opencode: { key: "other" } }))).toBe("go-key");
   expect(parseOpenCodeKey(JSON.stringify({ "opencode-go": { key: "go-key" } }))).toBe("go-key");
 });
 
@@ -113,10 +253,23 @@ test("an OpenCode rejection reads as login needed, not unchecked", async () => {
 });
 
 test("an OpenCode usage reply maps rolling and weekly to separate windows", async () => {
-  const windows = parseOpenCodeUsagePayload({ usage: { rollingUsage: { percentRemaining: 40, resetsAt: reset }, weeklyUsage: { percent: 88, resetsAt: reset } } });
+  const windows = parseOpenCodeUsagePayload({ usage: { rollingUsage: { percentRemaining: 40, resetsAt: reset, windowSeconds: 18000 }, weeklyUsage: { percent: 88, resetsAt: reset } } }, now);
   expect(windows).toEqual([
     { id: "five-hour", scope: "all", percentLeft: 40, resetsAt: reset },
     { id: "weekly", scope: "all", percentLeft: 12, resetsAt: reset },
+  ]);
+});
+
+test("an OpenCode reply without a rolling duration keeps rolling separate from five-hour", async () => {
+  const windows = parseOpenCodeUsagePayload({
+    rollingUsage: { usagePercent: 18, resetInSec: 3600 },
+    weeklyUsage: { usagePercent: 42, resetInSec: 604800 },
+    monthlyUsage: { usagePercent: 7, resetInSec: 2592000 },
+  }, now);
+  expect(windows).toEqual([
+    { id: "rolling", scope: "all", percentLeft: 82, resetsAt: "2030-01-01T01:00:00.000Z" },
+    { id: "weekly", scope: "all", percentLeft: 58, resetsAt: "2030-01-08T00:00:00.000Z" },
+    { id: "monthly", scope: "all", percentLeft: 93, resetsAt: "2030-01-31T00:00:00.000Z" },
   ]);
 });
 

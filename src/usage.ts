@@ -21,7 +21,7 @@ function finitePercent(value: unknown): number | undefined {
 }
 
 function isoOrNull(value: unknown): string | null | undefined {
-  if (value === undefined) return null;
+  if (value === undefined || value === null) return null;
   if (typeof value !== "string") return undefined;
   const time = Date.parse(value);
   return Number.isFinite(time) ? new Date(time).toISOString() : undefined;
@@ -64,16 +64,19 @@ function claudeScopedWindow(entry: unknown): QuotaWindow | undefined {
   if (typeof entry["percent"] !== "number") return undefined;
   const resetsAt = entry["resets_at"] ?? entry["reset_at"] ?? null;
   const percent = entry["percent"];
-  if (entry["group"] === "session") return claudeWindow(percent, resetsAt, "five-hour", "all");
-  if (entry["group"] === "weekly") return claudeWindow(percent, resetsAt, "weekly", "all");
   const scope = isRecord(entry["scope"]) ? entry["scope"] : undefined;
   const model = scope && isRecord(scope["model"]) ? scope["model"] : undefined;
   const display = model ? model["display_name"] : undefined;
   const modelId = model ? model["id"] : undefined;
   const name = (typeof display === "string" ? display : typeof modelId === "string" ? modelId : "").toLowerCase();
-  const identity = claudeModelScope(name);
-  if (!identity) return undefined;
-  return claudeWindow(percent, resetsAt, identity.id, identity.scope);
+  if (name.length > 0) {
+    const identity = claudeModelScope(name);
+    if (!identity) return undefined;
+    return claudeWindow(percent, resetsAt, identity.id, identity.scope);
+  }
+  if (entry["group"] === "session") return claudeWindow(percent, resetsAt, "five-hour", "all");
+  if (entry["group"] === "weekly") return claudeWindow(percent, resetsAt, "weekly", "all");
+  return undefined;
 }
 
 function claudeTopLevelWindows(raw: Record<string, unknown>): QuotaWindow[] | undefined {
@@ -81,11 +84,12 @@ function claudeTopLevelWindows(raw: Record<string, unknown>): QuotaWindow[] | un
     ["five_hour", "five-hour", "all"],
     ["seven_day", "weekly", "all"],
     ["seven_day_opus", "opus-weekly", "opus"],
+    ["seven_day_sonnet", "sonnet-weekly", "sonnet"],
   ];
   const windows: QuotaWindow[] = [];
   for (const [field, id, scope] of fields) {
     const entry = raw[field];
-    if (entry === undefined) continue;
+    if (entry === undefined || entry === null) continue;
     if (!isRecord(entry)) return undefined;
     const window = claudeWindow(entry["utilization"], entry["resets_at"] ?? entry["reset_at"] ?? null, id, scope);
     if (!window) return undefined;
@@ -109,13 +113,55 @@ export function parseClaudeUsagePayload(raw: unknown): QuotaWindow[] | undefined
   }
   return claudeTopLevelWindows(raw);
 }
-function codexWindow(raw: unknown, id: QuotaWindow["id"], scope: QuotaWindow["scope"]): QuotaWindow | undefined {
+function relativeReset(value: unknown, now: number): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return new Date(now + value * 1000).toISOString();
+}
+
+function durationSeconds(raw: Record<string, unknown>): number | undefined {
+  const seconds = raw["limit_window_seconds"];
+  if (typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0 && Number.isInteger(seconds)) return seconds;
+  const mins = raw["windowDurationMins"];
+  if (typeof mins === "number" && Number.isFinite(mins) && mins >= 0 && Number.isInteger(mins)) return mins * 60;
+  return undefined;
+}
+
+function codexId(
+  seconds: number | undefined,
+  positional: QuotaWindow["id"],
+  session: QuotaWindow["id"],
+  weekly: QuotaWindow["id"],
+  unfamiliar: (seconds: number) => QuotaWindow["id"],
+): QuotaWindow["id"] {
+  if (seconds === undefined) return positional;
+  if (seconds === 18_000) return session;
+  if (seconds === 604_800) return weekly;
+  return unfamiliar(seconds);
+}
+
+type CodexIdentities = {
+  readonly positional: QuotaWindow["id"];
+  readonly session: QuotaWindow["id"];
+  readonly weekly: QuotaWindow["id"];
+  readonly unfamiliar: (seconds: number) => QuotaWindow["id"];
+};
+
+function codexWindow(
+  raw: unknown,
+  scope: QuotaWindow["scope"],
+  now: number,
+  identities: CodexIdentities,
+): QuotaWindow | undefined {
   if (!isRecord(raw)) return undefined;
   const used = raw["used_percent"] ?? raw["usedPercent"];
   const percent = finitePercent(used);
   if (percent === undefined) return undefined;
-  const reset = epochOrIsoToIso(raw["reset_at"] ?? raw["resetsAt"] ?? raw["resetAt"]);
+  const seconds = durationSeconds(raw);
+  const reset = epochOrIsoToIso(raw["reset_at"] ?? raw["resetsAt"] ?? raw["resetAt"])
+    ?? relativeReset(raw["reset_after_seconds"], now);
   if (reset === undefined) return undefined;
+  const id = codexId(seconds, identities.positional, identities.session, identities.weekly, identities.unfamiliar);
   return { id, scope, percentLeft: 100 - percent, resetsAt: reset };
 }
 
@@ -127,26 +173,112 @@ function codexContainer(raw: unknown): Record<string, unknown> | undefined {
   return undefined;
 }
 
-function codexPair(container: Record<string, unknown>, first: QuotaWindow["id"], second: QuotaWindow["id"], scope: QuotaWindow["scope"]): QuotaWindow[] {
+function codexPair(
+  container: Record<string, unknown>,
+  scope: QuotaWindow["scope"],
+  now: number,
+  primary: CodexIdentities,
+  secondary: CodexIdentities,
+): QuotaWindow[] | undefined {
   const windows: QuotaWindow[] = [];
-  const primary = codexWindow(container["primary_window"] ?? container["primary"], first, scope);
-  const secondary = codexWindow(container["secondary_window"] ?? container["secondary"], second, scope);
-  if (primary) windows.push(primary);
-  if (secondary) windows.push(secondary);
+  const rawPrimary = container["primary_window"] ?? container["primary"];
+  if (rawPrimary !== undefined && rawPrimary !== null) {
+    const window = codexWindow(rawPrimary, scope, now, primary);
+    if (!window) return undefined;
+    windows.push(window);
+  }
+  const rawSecondary = container["secondary_window"] ?? container["secondary"];
+  if (rawSecondary !== undefined && rawSecondary !== null) {
+    const window = codexWindow(rawSecondary, scope, now, secondary);
+    if (!window) return undefined;
+    windows.push(window);
+  }
   return windows;
 }
 
-export function parseCodexUsagePayload(raw: unknown): QuotaWindow[] | undefined {
+function codexSlug(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const slug = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return slug.length > 0 ? slug.slice(0, 48) : undefined;
+}
+
+function codexNamedWindows(raw: unknown, now: number): QuotaWindow[] | undefined {
+  if (!isRecord(raw)) return undefined;
+  const windows: QuotaWindow[] = [];
+  const additional = Array.isArray(raw["additional_rate_limits"]) ? raw["additional_rate_limits"] : [];
+  for (const item of additional) {
+    if (!isRecord(item)) return undefined;
+    const slug = codexSlug(item["metered_feature"] ?? item["limit_name"]);
+    const container = isRecord(item["rate_limit"]) ? item["rate_limit"] : undefined;
+    if (!slug || !container) continue;
+    const pair = codexPair(container, slug, now, {
+      positional: `model-${slug}-5h`,
+      session: `model-${slug}-5h`,
+      weekly: `model-${slug}-7d`,
+      unfamiliar: (seconds) => `model-${slug}-window-${seconds}s`,
+    }, {
+      positional: `model-${slug}-7d`,
+      session: `model-${slug}-5h`,
+      weekly: `model-${slug}-7d`,
+      unfamiliar: (seconds) => `model-${slug}-window-${seconds}s`,
+    });
+    if (!pair) return undefined;
+    windows.push(...pair);
+  }
+  return windows;
+}
+
+export function parseCodexUsagePayload(raw: unknown, now: number): QuotaWindow[] | undefined {
   if (!isRecord(raw)) return undefined;
   const windows: QuotaWindow[] = [];
   const container = codexContainer(raw);
-  if (container) windows.push(...codexPair(container, "five-hour", "weekly", "all"));
+  if (container) {
+    const pair = codexPair(container, "all", now, {
+      positional: "five-hour",
+      session: "five-hour",
+      weekly: "weekly",
+      unfamiliar: (seconds) => `window-${seconds}s`,
+    }, {
+      positional: "weekly",
+      session: "five-hour",
+      weekly: "weekly",
+      unfamiliar: (seconds) => `window-${seconds}s`,
+    });
+    if (!pair) return undefined;
+    windows.push(...pair);
+  }
   const review = isRecord(raw["code_review_rate_limit"]) ? raw["code_review_rate_limit"] : undefined;
-  if (review) windows.push(...codexPair(review, "review-five-hour", "review-weekly", "code-review"));
+  if (review) {
+    const pair = codexPair(review, "code-review", now, {
+      positional: "review-five-hour",
+      session: "review-five-hour",
+      weekly: "review-weekly",
+      unfamiliar: (seconds) => `review-window-${seconds}s`,
+    }, {
+      positional: "review-weekly",
+      session: "review-five-hour",
+      weekly: "review-weekly",
+      unfamiliar: (seconds) => `review-window-${seconds}s`,
+    });
+    if (!pair) return undefined;
+    windows.push(...pair);
+  }
+  const named = codexNamedWindows(raw, now);
+  if (!named) return undefined;
+  windows.push(...named);
   return windows.length > 0 ? windows : undefined;
 }
 
-function openCodeWindow(raw: unknown, id: QuotaWindow["id"], scope: QuotaWindow["scope"]): QuotaWindow | undefined {
+function openCodeReset(raw: Record<string, unknown>, now: number): string | null | undefined {
+  const absolute = epochOrIsoToIso(raw["resetsAt"] ?? raw["resetAt"] ?? raw["reset_at"] ?? raw["nextResetTime"]);
+  if (absolute !== undefined && absolute !== null) return absolute;
+  const relative = raw["resetInSec"] ?? raw["reset_in_sec"];
+  if (relative === undefined || relative === null) return absolute ?? null;
+  if (typeof relative !== "number" || !Number.isFinite(relative) || relative < 0) return undefined;
+  return new Date(now + relative * 1000).toISOString();
+}
+
+function openCodeWindow(raw: unknown, id: QuotaWindow["id"], scope: QuotaWindow["scope"], now: number): QuotaWindow | undefined {
   if (!isRecord(raw)) return undefined;
   const remaining = raw["percentRemaining"] ?? raw["remainingPercent"];
   const used = raw["percent"] ?? raw["percentUsed"] ?? raw["usedPercent"] ?? raw["usagePercent"];
@@ -160,12 +292,22 @@ function openCodeWindow(raw: unknown, id: QuotaWindow["id"], scope: QuotaWindow[
     percentLeft = 0;
   }
   if (percentLeft === undefined) return undefined;
-  const reset = epochOrIsoToIso(raw["resetsAt"] ?? raw["resetAt"] ?? raw["reset_at"] ?? raw["nextResetTime"]);
+  const reset = openCodeReset(raw, now);
   if (reset === undefined) return undefined;
   return { id, scope, percentLeft, resetsAt: reset };
 }
 
-export function parseOpenCodeUsagePayload(raw: unknown): QuotaWindow[] | undefined {
+function openCodeDurationSeconds(raw: unknown): number | undefined {
+  if (!isRecord(raw)) return undefined;
+  const names = ["windowSeconds", "window_seconds", "cycleSeconds", "cycle_seconds", "durationSeconds", "duration_seconds", "periodSeconds", "period_seconds"];
+  for (const name of names) {
+    const value = raw[name];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0 && Number.isInteger(value)) return value;
+  }
+  return undefined;
+}
+
+export function parseOpenCodeUsagePayload(raw: unknown, now: number): QuotaWindow[] | undefined {
   if (!isRecord(raw)) return undefined;
   const nested = isRecord(raw["usage"]) ? raw["usage"] : undefined;
   const pick = (names: readonly string[]): unknown => {
@@ -177,17 +319,35 @@ export function parseOpenCodeUsagePayload(raw: unknown): QuotaWindow[] | undefin
     }
     return undefined;
   };
+  const rolling = pick(["rollingUsage", "rolling"]);
+  const buckets: Array<[unknown, QuotaWindow["id"], QuotaWindow["scope"]]> = [
+    [rolling, openCodeDurationSeconds(rolling) === 18_000 ? "five-hour" : "rolling", "all"],
+    [pick(["weeklyUsage", "weekly"]), "weekly", "all"],
+    [pick(["monthlyUsage", "monthly"]), "monthly", "all"],
+  ];
   const windows: QuotaWindow[] = [];
-  const rolling = openCodeWindow(pick(["rollingUsage", "rolling"]), "five-hour", "all");
-  const weekly = openCodeWindow(pick(["weeklyUsage", "weekly"]), "weekly", "all");
-  const monthly = openCodeWindow(pick(["monthlyUsage", "monthly"]), "monthly", "all");
-  if (rolling) windows.push(rolling);
-  if (weekly) windows.push(weekly);
-  if (monthly) windows.push(monthly);
+  for (const [bucket, id, scope] of buckets) {
+    if (bucket === undefined || bucket === null) continue;
+    const window = openCodeWindow(bucket, id, scope, now);
+    if (!window) return undefined;
+    windows.push(window);
+  }
   return windows.length > 0 ? windows : undefined;
 }
 export type ClaudeCredentials = { readonly accessToken: string; readonly expiresAt?: number };
-export type CodexCredentials = { readonly accessToken: string; readonly accountId?: string };
+export type CodexCredentials = { readonly accessToken: string; readonly accountId?: string; readonly expiresAt?: number };
+
+function decodeJwtExp(token: string): number | undefined {
+  const payload = token.split(".")[1];
+  if (!payload || /[^A-Za-z0-9\-_]/.test(payload)) return undefined;
+  const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const decoded = parseJson(atob(padded));
+  if (!isRecord(decoded)) return undefined;
+  const exp = decoded["exp"];
+  if (typeof exp !== "number" || !Number.isFinite(exp)) return undefined;
+  return exp * 1000;
+}
 
 function claudeCredentialsFrom(value: unknown): ClaudeCredentials | undefined {
   if (!isRecord(value)) return undefined;
@@ -207,7 +367,11 @@ function codexCredentialsFrom(value: unknown): CodexCredentials | undefined {
   if (typeof token !== "string" || token.length === 0) return undefined;
   const accountId = value["account_id"] ?? value["accountId"] ?? tokens["account_id"] ?? tokens["accountId"];
   if (accountId !== undefined && (typeof accountId !== "string" || accountId.length === 0)) return undefined;
-  return typeof accountId === "string" ? { accessToken: token, accountId } : { accessToken: token };
+  const expiresAt = decodeJwtExp(token);
+  if (typeof accountId === "string") {
+    return expiresAt === undefined ? { accessToken: token, accountId } : { accessToken: token, accountId, expiresAt };
+  }
+  return expiresAt === undefined ? { accessToken: token } : { accessToken: token, expiresAt };
 }
 
 export function parseClaudeCredentials(json: string): ClaudeCredentials | undefined {
@@ -221,7 +385,6 @@ export function parseCodexCredentials(json: string): CodexCredentials | undefine
 export function parseOpenCodeKey(json: string): string | undefined {
   const value = parseJson(json);
   if (!isRecord(value)) return undefined;
-  if (value["opencode"] !== undefined) return undefined;
   const entry = value["opencode-go"];
   if (!isRecord(entry)) return undefined;
   const key = entry["key"] ?? entry["apiKey"] ?? entry["api_key"];
