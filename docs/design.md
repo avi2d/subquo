@@ -56,6 +56,7 @@ Times are UTC strings with millisecond precision, such as `2030-01-01T00:00:00.0
 A Claude account with a known sign-in expiry within the next seven days has a `loginEndsInDays` field.
 It counts days from `writtenAt`, rounded up.
 The collector uses the saved refresh-token expiry, not the shorter access-token expiry.
+If the saved login does not give a usable refresh-token expiry, `loginEndsInDays` is `null`.
 A countdown is not proof that the sign-in still works.
 
 The deadline is the earlier of 120 seconds after `observedAt` and the first known window reset.

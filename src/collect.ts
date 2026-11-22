@@ -1,7 +1,7 @@
 import { Clock, Effect } from "effect";
 import { type Account, type FailureCode, type Snapshot, type Windows, loginWarningAt, measuredObservation } from "./index";
 
-export type Reading = { readonly loginExpiresAt?: number } & (
+export type Reading = { readonly loginExpiresAt?: number | null } & (
   | { readonly observedAt: string; readonly windows: typeof Windows.Type }
   | { readonly code: FailureCode }
 );
@@ -30,7 +30,8 @@ export const collectSnapshot = Effect.fnUntraced(function*<R>(collectors: readon
     version: "subquo.v1",
     writtenAt: new Date(now).toISOString(),
     accounts: readings.map(({ id, provider, reading }): Account => {
-      const days = reading.loginExpiresAt === undefined ? undefined : loginWarningAt(reading.loginExpiresAt, now);
+      const expiry = reading.loginExpiresAt;
+      const days = typeof expiry === "number" ? loginWarningAt(expiry, now) : expiry;
       return {
         id,
         provider,

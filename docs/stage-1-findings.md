@@ -47,7 +47,7 @@ It also reports that clauth 0.15.1 drops the key whenever it rewrites a login fi
 
 The check covered one login on one machine.
 It does not show that every Claude Code login has the field, or how long a sign-in lives.
-Without the field, subquo shows no sign-in countdown for that account.
+See the [snapshot design](design.md#the-snapshot) for how subquo handles a missing expiry.
 
 ## Setup-token output
 

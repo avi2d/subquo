@@ -169,8 +169,8 @@ const readClaudeAccount = Effect.fnUntraced(function*(
   const credentials = parseClaudeCredentials(content);
   if (!credentials) return unverified;
   const reading = yield* requestClaudeReading(credentials, fetchImpl, now);
-  if (credentials.refreshExpiresAt === undefined || ("code" in reading && reading.code === "auth_required")) return reading;
-  return { ...reading, loginExpiresAt: credentials.refreshExpiresAt } satisfies Reading;
+  if ("code" in reading && reading.code === "auth_required") return reading;
+  return { ...reading, loginExpiresAt: credentials.refreshExpiresAt ?? null } satisfies Reading;
 });
 
 const readCodexAccount = Effect.fnUntraced(function*(

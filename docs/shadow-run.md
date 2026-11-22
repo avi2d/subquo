@@ -23,7 +23,8 @@ Keep orc and firstmate on their existing readers until the staged switch.
 Each collector reads only the login named for that account and sends it only to that vendor's usage address.
 No other quota reader is required on the machine.
 The snapshot lives under `$XDG_STATE_HOME/subquo` or, if that variable is unset, under `~/.local/state/subquo`.
-Run `bun run subquo read` for text output, including any sign-in countdowns at the time the snapshot was written.
+Run `bun run subquo read` to see the sign-in countdown as of the time the snapshot was written.
+If the saved Claude login gave no usable refresh-token expiry, the command shows `login end unknown`.
 
 ## Compare Claude with clauth for a week
 
@@ -41,7 +42,8 @@ Run `bun run subquo read` for text output, including any sign-in countdowns at t
 
 A clauth value is current if clauth fetched it less than 120 seconds ago, does not mark it stale and its reset is still ahead.
 The command marks a subquo row `WORSE` if a subquo value is missing or stale, or if clauth reports a window subquo does not.
-It also marks a row `WORSE` if the reset differs from a current clauth value, or the percentage differs from it by more than one percentage point.
+A reset that differs from a current clauth value also makes the row `WORSE`.
+A difference of more than one percentage point from a current clauth value does too.
 It marks a row `UNCHECKED` if subquo has a value but no current clauth value can confirm it, including a window only subquo reports.
 The command exits with a nonzero status unless every row matches.
 If any row is worse or unchecked, keep orc and firstmate on their current readers.

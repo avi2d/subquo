@@ -16,8 +16,9 @@ const writeLine = Effect.fnUntraced(function*(line: string, output: "stdout" | "
   yield* Stream.make(`${line}\n`).pipe(Stream.run(stdio[output]()));
 });
 
-function loginNotice(days: number | undefined): string {
+function loginNotice(days: Snapshot["accounts"][number]["loginEndsInDays"]): string {
   if (days === undefined) return "";
+  if (days === null) return ", login end unknown";
   return days === 1 ? ", login ends in 1 day" : `, login ends in ${days} days`;
 }
 
