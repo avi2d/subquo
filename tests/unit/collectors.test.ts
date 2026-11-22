@@ -138,6 +138,18 @@ test("a malformed refresh expiry does not poison a usable Claude access token", 
   }))).toEqual({ accessToken: "fake-access", expiresAt: now + 2_000 });
 });
 
+test("a Claude refresh expiry in epoch seconds, before 2020 or outside the Date range reads as unknown, not as a date", () => {
+  const credentials = (refreshTokenExpiresAt: number) => parseClaudeCredentials(JSON.stringify({
+    claudeAiOauth: { accessToken: "fake-access", refreshTokenExpiresAt },
+  }));
+  for (const unusable of [1_900_000_000, Date.UTC(2019, 11, 31, 23, 59, 59, 999), 8.64e15 + 1, now + 0.5]) {
+    expect(credentials(unusable)).toEqual({ accessToken: "fake-access" });
+  }
+  for (const usable of [Date.UTC(2020, 0, 1), 8.64e15]) {
+    expect(credentials(usable)).toEqual({ accessToken: "fake-access", refreshExpiresAt: usable });
+  }
+});
+
 test("a legacy Claude reply keeps its sonnet window instead of dropping it", async () => {
   const windows = parseClaudeUsagePayload({
     five_hour: { utilization: 18, resets_at: reset },

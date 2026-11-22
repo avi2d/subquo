@@ -25,6 +25,7 @@ No other quota reader is required on the machine.
 The snapshot lives under `$XDG_STATE_HOME/subquo` or, if that variable is unset, under `~/.local/state/subquo`.
 Run `bun run subquo read` to see the sign-in countdown as of the time the snapshot was written.
 If the saved Claude login gave no usable refresh-token expiry, the command shows `login end unknown`.
+If the saved Claude sign-in has already ended, the command shows `login has ended` and still lists the quota it read.
 
 ## Compare Claude with clauth for a week
 

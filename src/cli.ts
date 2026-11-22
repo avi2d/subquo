@@ -19,6 +19,7 @@ const writeLine = Effect.fnUntraced(function*(line: string, output: "stdout" | "
 function loginNotice(days: Snapshot["accounts"][number]["loginEndsInDays"]): string {
   if (days === undefined) return "";
   if (days === null) return ", login end unknown";
+  if (days === 0) return ", login has ended";
   return days === 1 ? ", login ends in 1 day" : `, login ends in ${days} days`;
 }
 

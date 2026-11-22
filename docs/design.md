@@ -55,8 +55,11 @@ Times are UTC strings with millisecond precision, such as `2030-01-01T00:00:00.0
 
 A Claude account with a known sign-in expiry within the next seven days has a `loginEndsInDays` field.
 It counts days from `writtenAt`, rounded up.
+A sign-in that ended at or before `writtenAt` has `loginEndsInDays` of `0`, and its quota observation stays as read.
 The collector uses the saved refresh-token expiry, not the shorter access-token expiry.
-If the saved login does not give a usable refresh-token expiry, `loginEndsInDays` is `null`.
+A usable expiry is a whole number of epoch milliseconds from 2020-01-01 UTC to the last date JavaScript can hold, so a value in seconds is never read as a 1970 date.
+If subquo parses the saved login but its refresh-token expiry is missing or unusable, `loginEndsInDays` is `null`.
+If the login is missing or cannot be parsed, or the vendor answers that it needs a new sign-in, the account has no `loginEndsInDays` field, because its observation already shows that state.
 A countdown is not proof that the sign-in still works.
 
 The deadline is the earlier of 120 seconds after `observedAt` and the first known window reset.

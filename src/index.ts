@@ -60,12 +60,13 @@ const Account = Schema.Struct({
   id: Label,
   provider: Provider,
   observation: Observation,
-  loginEndsInDays: Schema.optionalKey(Schema.NullOr(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: loginWarningDays })))),
+  loginEndsInDays: Schema.optionalKey(Schema.NullOr(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: loginWarningDays })))),
 });
 
 export function loginWarningAt(expiresAt: number, now: number): number | undefined {
+  if (expiresAt <= now) return 0;
   const days = Math.ceil((expiresAt - now) / dayMs);
-  return days >= 1 && days <= loginWarningDays ? days : undefined;
+  return days <= loginWarningDays ? days : undefined;
 }
 
 function isFreshAt(observation: FreshObservation, now: number): boolean {

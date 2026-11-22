@@ -32,7 +32,7 @@ test("a hanging collector does not delay its peer or outlive its five-second bud
   await Effect.runPromise(program.pipe(Effect.provide(TestClock.layer())));
 });
 
-test("the login warning neither starts early nor counts a login that has already ended", async () => {
+test("the login warning does not start early, and an ended sign-in counts as zero days instead of reading as healthy", async () => {
   const day = 86_400_000;
   const now = Date.parse(observedAt);
   const expiries = [8 * day, 7 * day + 1, 7 * day, day + 1, 1, 0, -1];
@@ -46,6 +46,6 @@ test("the login warning neither starts early nor counts a login that has already
     return snapshot.accounts.map(({ loginEndsInDays }) => loginEndsInDays);
   });
   expect(await Effect.runPromise(program.pipe(Effect.provide(TestClock.layer())))).toEqual([
-    undefined, undefined, 7, 2, 1, undefined, undefined,
+    undefined, undefined, 7, 2, 1, 0, 0,
   ]);
 });
