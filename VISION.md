@@ -10,7 +10,7 @@ It owns the read of each named account's quota windows, and the one snapshot tha
 
 ## Read a login, never own it
 
-- It allows a read of an account's saved vendor login in memory, it forbids signing in, renewing, switching or copying a login, and it takes the trade of an account that shows login needed until its owner signs in again.
+- It allows reading a login in memory and asking the vendor's tool to renew it, it forbids writing or switching a login, and it leaves sign-in to you.
 
 ## No secret leaves the read
 

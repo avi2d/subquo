@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 const freshnessMs = 120_000;
 const Timestamp = Schema.String.check(
@@ -7,7 +7,7 @@ const Timestamp = Schema.String.check(
     return Number.isFinite(time) && new Date(time).toISOString() === value;
   }),
 );
-const Label = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/u));
+export const Label = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/u));
 const FailureCode = Schema.Literals(["timeout", "rate_limited", "auth_required", "auth_unverified"]);
 const Window = Schema.Struct({
   id: Label,
@@ -15,10 +15,20 @@ const Window = Schema.Struct({
   percentLeft: Schema.NullOr(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
   resetsAt: Schema.NullOr(Timestamp),
 });
+const Provider = Schema.Literals(["claude", "codex", "opencode-go"]);
+const Windows = Schema.NonEmptyArray(Window);
+
+function deadlineAt(observedAt: string, windows: typeof Windows.Type): number {
+  return windows.reduce(
+    (earliest, { resetsAt }) => (resetsAt === null ? earliest : Math.min(earliest, Date.parse(resetsAt))),
+    Date.parse(observedAt) + freshnessMs,
+  );
+}
+
 const measurement = {
   observedAt: Timestamp,
   source: Schema.Literal("provider"),
-  windows: Schema.NonEmptyArray(Window),
+  windows: Windows,
 };
 const Fresh = Schema.Struct({
   status: Schema.Literal("fresh"),
@@ -26,11 +36,7 @@ const Fresh = Schema.Struct({
   validUntil: Timestamp,
 }).check(
   Schema.makeFilter(({ observedAt, windows, validUntil }) => {
-    const deadline = windows.reduce(
-      (earliest, { resetsAt }) => (resetsAt === null ? earliest : Math.min(earliest, Date.parse(resetsAt))),
-      Date.parse(observedAt) + freshnessMs,
-    );
-    return Date.parse(validUntil) === deadline;
+    return Date.parse(validUntil) === deadlineAt(observedAt, windows);
   }),
 ).pipe(Schema.brand("BoundedFreshObservation"));
 const Stale = Schema.Struct({
@@ -48,7 +54,7 @@ type FreshObservation = typeof Fresh.Type;
 type Observation = typeof Observation.Type;
 const Account = Schema.Struct({
   id: Label,
-  provider: Schema.Literals(["claude", "codex", "opencode-go"]),
+  provider: Provider,
   observation: Observation,
 });
 
@@ -73,6 +79,28 @@ const Snapshot = Schema.Struct({
 );
 
 export type Snapshot = typeof Snapshot.Type;
+export type Account = typeof Account.Type;
+export type FailureCode = typeof FailureCode.Type;
+export type QuotaWindow = typeof Window.Type;
+export { Windows };
+
+const makeFresh = Schema.decodeUnknownOption(Fresh);
+
+export function measuredObservation(
+  observedAt: string,
+  windows: typeof Windows.Type,
+  now: number,
+  staleCode?: FailureCode | null,
+): Observation {
+  if (Date.parse(observedAt) > now) return { status: "unavailable", code: "auth_unverified" };
+  const validUntil = deadlineAt(observedAt, windows);
+  const reading = { observedAt, source: "provider" as const, windows };
+  if (staleCode !== undefined || validUntil <= now) {
+    return { status: "stale", ...reading, code: staleCode ?? null };
+  }
+  const fresh = makeFresh({ status: "fresh", ...reading, validUntil: new Date(validUntil).toISOString() });
+  return Option.getOrElse(fresh, () => ({ status: "unavailable", code: "auth_unverified" }) as const);
+}
 
 class InvalidSnapshot extends Schema.TaggedError<InvalidSnapshot>()("InvalidSnapshot", {}) {}
 

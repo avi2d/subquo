@@ -12,15 +12,19 @@
     "email": "avi2dg@gmail.com"
   },
   "type": "module",
+  "bin": { "subquo": "src/cli.ts" },
   "scripts": {
+    "subquo": "bun --no-env-file src/cli.ts",
     "build": "checks-effect-scope",
     "lint": "oxlint && checks-lint",
     "typecheck": "tsc --noEmit && effect-tsgo diagnostics --project tsconfig.json --format text --strict",
     "test": "checks-test",
+    "test:e2e": "checks-test --tier=e2e",
     "test:fast": "checks-test --changed",
     "test:unit": "checks-test --tier=unit"
   },
   "dependencies": {
+    "@effect/platform-bun": "4.0.0",
     "effect": "4.0.0"
   },
   "devDependencies": {
