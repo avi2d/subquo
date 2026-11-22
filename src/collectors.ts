@@ -1,6 +1,6 @@
-import { Clock, Effect, FileSystem, Predicate, Result, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { validClaudeKeychainService, type EnrolledAccount } from "./accounts";
+import { Clock, Effect, FileSystem, Predicate, Result } from "effect";
+import type { EnrolledAccount } from "./accounts";
+import { readKeychainPassword } from "./keychain";
 import type { Reading } from "./collect";
 import {
   measuredAt,
@@ -140,20 +140,7 @@ const readKeychainContent = Effect.fnUntraced(function*(
   login: Extract<EnrolledAccount["login"], { readonly store: "macos-keychain" }>,
   env: Record<string, string | undefined>,
 ) {
-  if (!validClaudeKeychainService(login)) return undefined;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const command = ChildProcess.make("/usr/bin/security", ["find-generic-password", "-s", login.service, "-w"], {
-    env,
-    stdin: "ignore",
-    stderr: "ignore",
-    killSignal: "SIGKILL",
-  });
-  return yield* Effect.scoped(Effect.gen(function*() {
-    const child = yield* spawner.spawn(command);
-    const content = yield* child.stdout.pipe(Stream.decodeText, Stream.mkString);
-    if ((yield* child.exitCode) !== 0) return undefined;
-    return content;
-  })).pipe(Effect.orElseSucceed(() => undefined as string | undefined));
+  return yield* readKeychainPassword(login, env).pipe(Effect.orElseSucceed(() => undefined as string | undefined));
 });
 
 const readNamedFile = Effect.fnUntraced(function*(file: string) {

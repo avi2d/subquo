@@ -1,6 +1,6 @@
 import { Clock, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { claudeDefaultKeychainService, validClaudeKeychainService, type EnrolledAccount } from "./accounts";
+import { claudeDefaultKeychainService, type EnrolledAccount } from "./accounts";
+import { readKeychainPassword } from "./keychain";
 
 const ClaudeLogin = Schema.Struct({
   claudeAiOauth: Schema.Struct({
@@ -50,17 +50,11 @@ const readKeychain = Effect.fnUntraced(function*(
   login: Extract<EnrolledAccount["login"], { readonly store: "macos-keychain" }>,
   env: Record<string, string | undefined>,
 ) {
-  if (!validClaudeKeychainService(login)) return yield* unchecked();
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const command = ChildProcess.make("/usr/bin/security", ["find-generic-password", "-s", login.service, "-w"], {
-    env, stdin: "ignore", stderr: "ignore", killSignal: "SIGKILL",
-  });
-  return yield* Effect.scoped(Effect.gen(function*() {
-    const child = yield* spawner.spawn(command);
-    const content = yield* child.stdout.pipe(Stream.decodeText, Stream.mkString);
-    if ((yield* child.exitCode) !== 0) return yield* unchecked();
-    return content;
-  })).pipe(Effect.timeoutOrElse({ duration: 5_000, orElse: () => Effect.fail(unchecked()) }));
+  const content = yield* readKeychainPassword(login, env).pipe(
+    Effect.timeoutOrElse({ duration: 5_000, orElse: () => Effect.fail(unchecked()) }),
+  );
+  if (content === undefined) return yield* unchecked();
+  return content;
 });
 
 const runClaude = Effect.fnUntraced(function*(env: Record<string, string | undefined>, configDir: string | undefined) {
