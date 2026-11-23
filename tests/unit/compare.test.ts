@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { compareClaude, parseClAuthStatus } from "../../src/compare";
 import { measuredObservation, type Account, type QuotaWindow } from "../../src/index";
+import schema1 from "../fixtures/clauth/schema-1.json";
+import schema2 from "../fixtures/clauth/schema-2.json";
 
 const observedAt = "2030-01-01T00:00:00.000Z";
 const now = Date.parse(observedAt);
@@ -28,6 +30,20 @@ function decodeReference(
     }],
   })));
 }
+
+test("schema 1 and schema 2 status do not get rejected or lose their quota windows", async () => {
+  for (const fixture of [schema1, schema2]) {
+    const input = await Effect.runPromise(parseClAuthStatus(JSON.stringify(fixture)));
+    const report = compareClaude([enrolled], { accounts: [reading()] }, input, now);
+    expect(report.matched).toBe(true);
+    expect(report.text).toContain("example\tfive-hour\t75%, reset 2030-01-01T01:00:00.000Z, fresh\t75%, reset 2030-01-01T01:00:00.000Z, fresh\tMATCH");
+  }
+});
+
+test("an unknown clauth schema does not pass as a supported status", () => {
+  const result = Effect.runSync(Effect.result(parseClAuthStatus(JSON.stringify({ ...schema2, schema: 3 }))));
+  expect(Result.isFailure(result)).toBe(true);
+});
 
 test("an equal instant and exactly one percentage point of drift do not fail the comparison", async () => {
   const input = await decodeReference([{ ...window, utilization_pct: 24, resets_at: "2030-01-01T02:00:00+01:00" }]);
