@@ -20,7 +20,7 @@ const ClAuthProfile = Schema.Struct({
   windows: Schema.Array(ClAuthWindow),
 });
 const ClAuthStatus = Schema.Struct({
-  schema: Schema.Literal(1),
+  schema: Schema.Literals([1, 2]),
   generated_at: ClAuthTime,
   profiles: Schema.Array(ClAuthProfile),
 });
