@@ -36,24 +36,13 @@ const AccountEntry = Schema.Union([
     id: Label,
     provider: Schema.Literal("claude"),
     login: Schema.Union([ClaudeFile, Keychain]),
-    clauth_profile: Schema.optionalKey(Schema.NonEmptyString),
   }),
   Schema.Struct({ id: Label, provider: Schema.Literal("codex"), login: CodexFile }),
   Schema.Struct({ id: Label, provider: Schema.Literal("opencode-go"), login: OpenCodeFile }),
 ]);
 export type EnrolledAccount = typeof AccountEntry.Type;
-type ClaudeAccount = Extract<EnrolledAccount, { readonly provider: "claude" }>;
-
-export function clauthProfileName(account: Pick<ClaudeAccount, "id" | "clauth_profile">): string {
-  return account.clauth_profile ?? account.id;
-}
-
 const AccountList = Schema.Struct({ accounts: Schema.Array(AccountEntry) }).check(
   Schema.makeFilter(({ accounts }) => new Set(accounts.map(({ id }) => id)).size === accounts.length),
-  Schema.makeFilter(({ accounts }) => {
-    const profiles = accounts.filter(({ provider }) => provider === "claude").map(clauthProfileName);
-    return new Set(profiles).size === profiles.length;
-  }),
 );
 
 class InvalidAccountList extends Schema.TaggedError<InvalidAccountList>()("InvalidAccountList", {}) {}

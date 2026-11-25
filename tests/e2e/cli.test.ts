@@ -62,7 +62,7 @@ async function invoke(
   return { exit, stdout, stderr };
 }
 
-test("refresh and compare keep Claude logins separate and do not show a missing expiry as a healthy login", async () => {
+test("refresh keeps Claude logins separate and does not show a missing expiry as a healthy login", async () => {
   const { root, config, profile, env } = await setup();
   try {
     const second = join(root, "second");
@@ -76,7 +76,7 @@ test("refresh and compare keep Claude logins separate and do not show a missing 
     }));
     await writeFile(secondLogin, JSON.stringify({ claudeAiOauth: { accessToken: "fake-access-second", expiresAt } }));
     await writeFile(join(config, "accounts.toml"), [
-      "[[accounts]]", 'id = "example-first"', 'provider = "claude"', 'clauth_profile = "fake-other-label"',
+      "[[accounts]]", 'id = "example-first"', 'provider = "claude"',
       `login = { store = "file", path = ${JSON.stringify(firstLogin)} }`,
       "[[accounts]]", 'id = "example-second"', 'provider = "claude"',
       `login = { store = "file", path = ${JSON.stringify(secondLogin)} }`,
@@ -108,21 +108,6 @@ test("refresh and compare keep Claude logins separate and do not show a missing 
     const read = await invoke(env, ["read"]);
     expect(read.stdout).toContain("example-first: fresh, login ends in 7 days");
     expect(read.stdout).toContain("example-second: fresh, login end unknown");
-
-    const capturedAt = new Date().toISOString();
-    const baseline = (name: string, utilization_pct: number) => ({
-      name, provider: "anthropic", harness: "claude", base_url: null, fetched_at: capturedAt, stale: false,
-      windows: [{ label: "5h", utilization_pct, resets_at: reset }],
-    });
-    const input = JSON.stringify({
-      schema: 1, generated_at: capturedAt, profiles: [baseline("example-second", 40), baseline("fake-other-label", 5)],
-    });
-    const compared = await invoke(env, ["compare"], { input });
-    expect(compared.exit).toBe(1);
-    expect(compared.stderr).toBe("");
-    expect(compared.stdout).toContain(`example-first\tfive-hour\t75%, reset ${reset}, fresh\t95%, reset ${reset}, fresh\tWORSE`);
-    expect(compared.stdout).toContain(`example-second\tfive-hour\t60%, reset ${reset}, fresh\t60%, reset ${reset}, fresh\tMATCH`);
-    expect(compared.stdout).not.toContain("fake-other-label");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -16,14 +16,12 @@ Do not commit the file or copy logins between machines.
 | --- | --- |
 | `id` | A unique, stable local label of 1 to 64 lowercase letters, digits, hyphens, or underscores. Start with a letter or digit. |
 | `provider` | `claude`, `codex`, or `opencode-go`. |
-| `clauth_profile` | Optional for Claude accounts. The clauth profile label if it differs from `id`. |
 | `login.store` | `file` or `macos-keychain`. Use `macos-keychain` only for Claude Code on macOS. |
 | `login.path` | For `file`, the absolute path to the provider's login file. |
 | `login.config_dir` | For `macos-keychain`, the absolute path Claude Code uses as its configuration directory for this account. |
 | `login.service` | For `macos-keychain`, the service name of the account's Keychain item, not its value. Use the exact item name, either `Claude Code-credentials` or its `Claude Code-credentials-<hash>` form. |
 
 Each `login` table lists only the fields for its store.
-Each Claude account uses a different clauth profile label.
 On Linux or Windows Subsystem for Linux, use `file` for Claude Code.
 For a custom Claude Code directory on macOS, match the exact directory spelling in `CLAUDE_CONFIG_DIR`.
 For a Claude Code file, use its existing `.credentials.json` file.
