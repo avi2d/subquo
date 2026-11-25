@@ -28,7 +28,6 @@ To set up a working copy:
 
 ## Run beside your quota tools
 
-See [Run subquo beside your quota tools](docs/shadow-run.md) to set up a private account list and keep your existing readers in place.
 
 ## Check a change
 
