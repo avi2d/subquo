@@ -1,6 +1,7 @@
 import { Option, Schema } from "effect";
 import type { Reading } from "./collect";
-import { parsePiCodexLogin, type CodexCredentials } from "./pi-codex";
+import { parsePiCodexLogin } from "./pi-codex";
+import type { CodexCredentials } from "./codex-credentials";
 import { Windows, type QuotaWindow } from "./index";
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
 const decodeWindows = Schema.decodeUnknownOption(Windows);
