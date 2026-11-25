@@ -349,6 +349,40 @@ test("a named default Keychain login is not rejected as unverified", async () =>
   expect(validClaudeKeychainService({ config_dir: "/home/user/.claude", service: "Claude Code-credentials-deadbeef" })).toBe(false);
 });
 
+test("a Pi Codex login uses its own account and keeps its credentials out of the reading", async () => {
+  const seen: Record<string, string>[] = [];
+  const fetchImpl: FetchImpl = (_url, init) => {
+    seen.push(init.headers);
+    return Promise.resolve(jsonResponse({ rate_limit: { primary_window: { used_percent: 60, reset_at: reset } } }));
+  };
+  const credentials = parseCodexCredentials(JSON.stringify({
+    "openai-codex": { type: "oauth", access: "synthetic-access", refresh: "synthetic-refresh", expires: now + 60_000, accountId: "sample-account" },
+  }));
+  if (!credentials) throw new Error("test credential rejected");
+  const reading = await Effect.runPromise(requestCodexReading(credentials, fetchImpl, now));
+  expect(seen[0]?.["ChatGPT-Account-Id"]).toBe("sample-account");
+  expect(seen[0]?.authorization).toBe("Bearer synthetic-access");
+  expect(reading).toEqual({ observedAt: new Date(now).toISOString(), windows: [{ id: "five-hour", scope: "all", percentLeft: 40, resetsAt: reset }] });
+  expect(JSON.stringify(reading)).not.toContain("synthetic");
+});
+
+test("a rejected expired Pi Codex login is unchecked rather than signed out", async () => {
+  const credentials = parseCodexCredentials(JSON.stringify({
+    "openai-codex": { type: "oauth", access: "synthetic-access", refresh: "synthetic-refresh", expires: now - 1, accountId: "sample-account" },
+  }));
+  if (!credentials) throw new Error("test credential rejected");
+  const reading = await Effect.runPromise(requestCodexReading(credentials, () => Promise.resolve(statusResponse(401)), now));
+  expect(reading).toEqual({ code: "auth_unverified" });
+});
+
+test("a malformed Pi login does not fall back to another Codex login", () => {
+  const credentials = parseCodexCredentials(JSON.stringify({
+    "openai-codex": { type: "api_key", access: "synthetic-access" },
+    tokens: { access_token: "other-access" },
+  }));
+  expect(credentials).toBeUndefined();
+});
+
 test("a Codex login keeps its account header while the token stays out of the reading", async () => {
   const seen: Record<string, string>[] = [];
   const fetchImpl: FetchImpl = (_url, init) => {
