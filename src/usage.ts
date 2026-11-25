@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
 import type { Reading } from "./collect";
-import { parsePiCodexLogin } from "./pi-codex";
+import { parsePiCodexLogin, type CodexCredentials } from "./pi-codex";
 import { Windows, type QuotaWindow } from "./index";
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
 const decodeWindows = Schema.decodeUnknownOption(Windows);
@@ -334,7 +334,6 @@ type ClaudeAccess = typeof ClaudeAccess.Type;
 export type ClaudeCredentials = ClaudeAccess & { readonly refreshExpiresAt?: number };
 const decodeClaudeAccess = Schema.decodeUnknownOption(ClaudeAccess);
 const decodeRefreshExpiry = Schema.decodeUnknownOption(RefreshExpiry);
-export type CodexCredentials = { readonly accessToken: string; readonly accountId?: string; readonly expiresAt?: number };
 
 function decodeJwtExp(token: string): number | undefined {
   const payload = token.split(".")[1];

@@ -27,7 +27,7 @@ Each Claude account uses a different clauth profile label.
 On Linux or Windows Subsystem for Linux, use `file` for Claude Code.
 For a custom Claude Code directory on macOS, match the exact directory spelling in `CLAUDE_CONFIG_DIR`.
 For a Claude Code file, use its existing `.credentials.json` file.
-For a Codex account, use the `auth.json` file saved by Codex or Pi.
+For a Codex account, use the `auth.json` file in the Codex home folder, `~/.codex` by default, or the one Pi saves in its agent folder, `~/.pi/agent` by default.
 For OpenCode Go, use the existing `opencode/auth.json` under its data directory.
 
 ## Example

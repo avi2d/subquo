@@ -371,7 +371,11 @@ test("a rejected expired Pi Codex login is unchecked rather than signed out", as
     "openai-codex": { type: "oauth", access: "synthetic-access", refresh: "synthetic-refresh", expires: now - 1, accountId: "sample-account" },
   }));
   if (!credentials) throw new Error("test credential rejected");
-  const reading = await Effect.runPromise(requestCodexReading(credentials, () => Promise.resolve(statusResponse(401)), now));
+  const program = Effect.gen(function*() {
+    yield* TestClock.setTime(now);
+    return yield* requestCodexReading(credentials, () => Promise.resolve(statusResponse(401)), now);
+  }).pipe(Effect.provide(TestClock.layer()));
+  const reading = await Effect.runPromise(program);
   expect(reading).toEqual({ code: "auth_unverified" });
 });
 
