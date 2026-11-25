@@ -50,7 +50,7 @@ function claudeWindow(used: unknown, resetsAt: unknown, id: QuotaWindow["id"], s
   return { id, scope, percentLeft: 100 - percent, resetsAt: reset };
 }
 
-export function claudeModelScope(name: string): Pick<QuotaWindow, "id" | "scope"> | undefined {
+function claudeModelScope(name: string): Pick<QuotaWindow, "id" | "scope"> | undefined {
   const families = name.toLowerCase().split(/[^a-z0-9]+/u);
   const known = (["opus", "sonnet", "haiku", "fable"] as const).filter((family) => families.includes(family));
   const [scope] = known;
