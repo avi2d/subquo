@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
 
-export type CodexCredentials = { readonly accessToken: string; readonly accountId?: string; readonly expiresAt?: number };
+import type { CodexCredentials } from "./codex-credentials";
 
 const PiCodexLogin = Schema.Struct({
   type: Schema.Literal("oauth"),
