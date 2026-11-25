@@ -23,8 +23,6 @@ It never contacts the network, waits on a lock or triggers a refresh.
 Its deadline is one second, with 200 milliseconds as the normal target.
 `subquo read` shows the same snapshot as text and checks quota freshness again when it prints.
 
-It displays both readings for each window and fails if any row is worse or lacks a current value to check against.
-
 ## The account list
 
 Each machine keeps a private account list that names every paid account, its provider and where its saved login lives.
@@ -121,3 +119,4 @@ The design sources leave these open:
 ## Related topics
 
 - [Vision](../VISION.md)
+- [Run subquo beside your quota tools](shadow-run.md)

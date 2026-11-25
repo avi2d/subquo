@@ -22,7 +22,6 @@ Do not commit the file or copy logins between machines.
 | `login.service` | For `macos-keychain`, the service name of the account's Keychain item, not its value. Use the exact item name, either `Claude Code-credentials` or its `Claude Code-credentials-<hash>` form. |
 
 Each `login` table lists only the fields for its store.
-Each Claude account uses a different clauth profile label.
 On Linux or Windows Subsystem for Linux, use `file` for Claude Code.
 For a custom Claude Code directory on macOS, match the exact directory spelling in `CLAUDE_CONFIG_DIR`.
 For a Claude Code file, use its existing `.credentials.json` file.
