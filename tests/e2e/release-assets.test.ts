@@ -1,21 +1,12 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const root = new URL("../..", import.meta.url).pathname;
-const usage = "subquo read";
-const verifier = `
-  import { strict as assert } from "node:assert";
-  const child = Bun.spawn([process.env.EXECUTABLE], { stdout: "pipe", stderr: "pipe" });
-  const [exit, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
-  assert.equal(exit, 1);
-  assert.equal(stdout, "");
-  assert.ok(stderr.includes(process.env.EXPECTED), "expected " + process.env.EXPECTED + " in " + stderr);
-`;
 
-test("compiled release rejects wrong usage and includes a matching SHA-256 file", async () => {
+test("compiled release rejects wrong usage, ignores cwd dotenv and preloads, and includes a matching SHA-256 file", async () => {
   const output = await mkdtemp(join(tmpdir(), "subquo-release-"));
   try {
     const build = Bun.spawn([process.execPath, "--no-env-file", join(root, "scripts/release-assets.ts"), output], {
@@ -30,23 +21,32 @@ test("compiled release rejects wrong usage and includes a matching SHA-256 file"
     const digest = createHash("sha256").update(await readFile(executable)).digest("hex");
     expect(await readFile(`${executable}.sha256`, "utf8")).toBe(`${digest}  ${name}\n`);
 
-    async function verify(expected: string) {
-      const child = Bun.spawn([process.execPath, "--no-env-file", "--eval", verifier], {
-        env: { HOME: output, PATH: process.env.PATH ?? "", EXECUTABLE: executable, EXPECTED: expected }, stdout: "pipe", stderr: "pipe",
-      });
-      const [exit, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
-      return { exit, stderr };
-    }
+    const env = { HOME: output, PATH: process.env.PATH ?? "" };
+    const usage = Bun.spawn([executable], { cwd: output, env, stdout: "pipe", stderr: "pipe" });
+    const [usageExit, usageOutput, usageError] = await Promise.all([
+      usage.exited, new Response(usage.stdout).text(), new Response(usage.stderr).text(),
+    ]);
+    expect(usageExit).toBe(1);
+    expect(usageOutput).toBe("");
+    expect(usageError).toContain("subquo read");
 
-    const twin = await verify("incorrect usage");
-    console.log(`fail-first usage check exit: ${twin.exit}`);
-    expect(twin.exit).not.toBe(0);
-    expect(twin.stderr).toContain("incorrect usage");
-    expect(twin.stderr).toContain(usage);
-    const correct = await verify(usage);
-    console.log(`correct usage check exit: ${correct.exit}`);
-    expect(correct.stderr).toBe("");
-    expect(correct.exit).toBe(0);
+    const state = join(output, ".local", "state", "subquo");
+    const snapshot = { version: "subquo.v1", writtenAt: "2030-01-01T00:00:00.000Z", accounts: [] };
+    await mkdir(state, { recursive: true });
+    await writeFile(join(state, "snapshot.json"), JSON.stringify(snapshot));
+    await writeFile(join(output, ".env"), `XDG_STATE_HOME=${JSON.stringify(join(output, "redirected-state"))}\n`);
+    await writeFile(join(output, "bunfig.toml"), 'preload = ["./preload.ts"]\n');
+    const marker = join(output, "preload-ran");
+    await writeFile(join(output, "preload.ts"), `await Bun.write(${JSON.stringify(marker)}, "ran");\n`);
+
+    const read = Bun.spawn([executable, "read", "--json"], { cwd: output, env, stdout: "pipe", stderr: "pipe" });
+    const [readExit, readOutput, readError] = await Promise.all([
+      read.exited, new Response(read.stdout).text(), new Response(read.stderr).text(),
+    ]);
+    expect(await Bun.file(marker).exists()).toBe(false);
+    expect(readError).toBe("");
+    expect(readExit).toBe(0);
+    expect(JSON.parse(readOutput)).toEqual(snapshot);
   } finally {
     await rm(output, { recursive: true, force: true });
   }

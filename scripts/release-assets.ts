@@ -12,7 +12,7 @@ if (!((process.platform === "linux" && process.arch === "x64") || (process.platf
   await $`mkdir -p ${output}`;
   const result = await Bun.build({
     entrypoints: [`${root}src/cli.ts`],
-    compile: { outfile: executable },
+    compile: { outfile: executable, autoloadDotenv: false, autoloadBunfig: false },
     bytecode: true,
     format: "esm",
   });
