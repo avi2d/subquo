@@ -7,24 +7,31 @@ You can collect and read snapshots beside your existing quota tools without chan
 
 ## Before you begin
 
-- Git.
-- Bun, at the version `.bun-version` pins.
+- Linux x64 or macOS arm64.
+- `shasum` for checking the download.
+- A directory on your `PATH` for the executable.
 
 ## Install
 
-To set up a working copy:
+To install subquo:
 
-1. Clone the repository:
-
-   ```sh
-   git clone https://github.com/avi2d/subquo.git
-   ```
-
-1. Install the dependencies from the repository root:
+1. Download the executable and its matching `.sha256` file from the [latest release](https://github.com/avi2d/subquo/releases/latest).
+   Choose `subquo-linux-x64` for Linux x64 or `subquo-darwin-arm64` for macOS arm64.
+1. In the download directory, check the matching checksum file:
 
    ```sh
-   bun install
+   shasum -a 256 -c subquo-linux-x64.sha256
    ```
+
+   On macOS, use `subquo-darwin-arm64.sha256` instead.
+1. Install the executable to a directory on your `PATH`, named `subquo`:
+
+   ```sh
+   mkdir -p ~/.local/bin
+   install -m 755 subquo-linux-x64 ~/.local/bin/subquo
+   ```
+
+   On macOS, use `subquo-darwin-arm64` instead.
 
 ## Run beside your quota tools
 
@@ -32,7 +39,8 @@ To set up a working copy:
 
 ## Check a change
 
-To run the checks a pull request runs:
+To run the checks a pull request runs, clone the repository and install dependencies with the Bun version in `.bun-version`.
+Run `bun install` from the repository root, then follow these steps:
 
 1. Run oxlint and every gate of the checks kit:
 
