@@ -1,10 +1,9 @@
 #!/usr/bin/env -S bun --no-env-file
 import { BunRuntime, BunServices } from "@effect/platform-bun";
-import { ByteSize, Clock, Effect, Option, Path, Schema, Stdio, Stream } from "effect";
+import { Clock, Effect, Path, Schema, Stdio, Stream } from "effect";
 import { loadAccounts } from "./accounts";
 import { readAccount } from "./collectors";
 import { collectSnapshot } from "./collect";
-import { compareClaude, parseClAuthStatus } from "./compare";
 import { type Snapshot, observationAt, serializeSnapshot } from "./index";
 import { renewIdleLogin } from "./renewal";
 import { readSnapshot, withStateLock, writeSnapshot } from "./storage";
@@ -48,36 +47,6 @@ const statePaths = Effect.fnUntraced(function*(home: string, stateHome: string |
     snapshot: path.join(directory, "snapshot.json"),
     renewalLock: path.join(directory, "renewal.sqlite"),
   };
-});
-
-const compare = Effect.fnUntraced(function*(files: { readonly accounts: string; readonly snapshot: string }) {
-  const stdio = yield* Stdio.Stdio;
-  const inputFailed = () => new CommandFailed();
-  const readClauth = stdio.stdin.pipe(
-    Stream.mapError(inputFailed),
-    Stream.limitBytes(ByteSize.bytes(1_048_576), () => Stream.fail(inputFailed())),
-    Stream.decodeText,
-    Stream.mkString,
-    Effect.flatMap(parseClAuthStatus),
-    Effect.timeoutOrElse({ duration: 5_000, orElse: () => Effect.fail(inputFailed()) }),
-  );
-  const terminal = yield* stdio.stdinIsTerminal;
-  const clauth = yield* (terminal ? Effect.fail(inputFailed()) : readClauth).pipe(
-    Effect.tapError(() => writeLine("Could not read clauth status. Pipe clauth status --json --all into subquo compare.", "stderr")),
-  );
-  const { accounts } = yield* loadAccounts(files.accounts).pipe(
-    Effect.tapError(() => writeLine("Could not read the subquo account list.", "stderr")),
-  );
-  const enrolled = accounts.filter(({ provider }) => provider === "claude");
-  if (enrolled.length === 0) {
-    yield* writeLine("No Claude accounts in the subquo account list.", "stderr");
-    return yield* new CommandFailed();
-  }
-  const snapshot = yield* readSnapshot(files.snapshot).pipe(Effect.option);
-  const now = yield* Clock.currentTimeMillis;
-  const result = compareClaude(enrolled, Option.getOrUndefined(snapshot), clauth, now);
-  yield* writeLine(result.text, "stdout");
-  if (!result.matched) return yield* new CommandFailed();
 });
 
 const renew = Effect.fnUntraced(function*(
@@ -130,8 +99,6 @@ const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefi
     return yield* writeLine(output, "stdout");
   }
 
-  if (command === "compare" && args.length === 1) return yield* compare(files);
-
   if (command === "refresh" && args.length === 1) {
     return yield* withStateLock(files.lock, Effect.gen(function*() {
       const { accounts } = yield* loadAccounts(files.accounts);
@@ -146,7 +113,7 @@ const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefi
     return yield* renew(files, id, { HOME: home, PATH: executablePath });
   }
 
-  yield* writeLine("Usage: subquo refresh [--renew-idle <account>] | subquo read [--json] | subquo compare", "stderr");
+  yield* writeLine("Usage: subquo refresh [--renew-idle <account>] | subquo read [--json]", "stderr");
   return yield* new CommandFailed();
 });
 
