@@ -12,8 +12,8 @@ import {
   parseOpenCodeKey,
   parseOpenCodeUsagePayload,
   type ClaudeCredentials,
-  type CodexCredentials,
 } from "./usage";
+import type { CodexCredentials } from "./pi-codex";
 
 const ClaudeUsageUrl = "https://api.anthropic.com/api/oauth/usage";
 const CodexUsageUrls = ["https://chatgpt.com/backend-api/wham/usage", "https://chatgpt.com/backend-api/codex/usage"];
