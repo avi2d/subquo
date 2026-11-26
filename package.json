@@ -1,6 +1,6 @@
 {
   "name": "@avi2dg/subquo",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Subscription quota reader for paid AI coding accounts",
   "license": "MIT",
   "repository": {
