@@ -1,5 +1,5 @@
 {
-  "name": "subquo",
+  "name": "@avi2dg/subquo",
   "version": "0.0.0",
   "description": "Subscription quota reader for paid AI coding accounts",
   "license": "MIT",
@@ -13,7 +13,7 @@
   },
   "type": "module",
   "bin": {
-    "subquo": "src/cli.ts"
+    "subquo": "src/launch.ts"
   },
   "scripts": {
     "subquo": "bun --no-env-file src/cli.ts",
@@ -31,12 +31,15 @@
     "effect": "4.0.0"
   },
   "devDependencies": {
-    "@avi2dg/checks": "0.117.2",
+    "@avi2dg/checks": "0.118.0",
     "@hughescr/stryker-bun-runner": "1.4.0",
     "@stryker-mutator/core": "10.0.0",
     "@types/bun": "1.4.5"
   },
   "trustedDependencies": [
     "@swc/core"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }
