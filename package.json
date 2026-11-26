@@ -1,6 +1,6 @@
 {
   "name": "@avi2dg/subquo",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Subscription quota reader for paid AI coding accounts",
   "license": "MIT",
   "repository": {
@@ -17,7 +17,7 @@
   },
   "scripts": {
     "subquo": "bun --no-env-file src/cli.ts",
-    "build": "checks-effect-scope",
+    "build": "checks-effect-scope && checks-changelog",
     "release:assets": "bun --no-env-file scripts/release-assets.ts",
     "lint": "oxlint && checks-lint",
     "typecheck": "tsc --noEmit && effect-tsgo diagnostics --project tsconfig.json --format text --strict",
