@@ -7,31 +7,26 @@ You can collect and read snapshots beside your existing quota tools without chan
 
 ## Before you begin
 
-- Linux x64 or macOS arm64.
-- `shasum` for checking the download.
-- A directory on your `PATH` for the executable.
+- Bun.
+- Linux x64 or macOS arm64 for the compiled executable.
 
 ## Install
 
 To install subquo:
 
-1. Download the executable and its matching `.sha256` file from the [latest release](https://github.com/avi2d/subquo/releases/latest).
-   Choose `subquo-linux-x64` for Linux x64 or `subquo-darwin-arm64` for macOS arm64.
-1. In the download directory, check the matching checksum file:
+1. Add the package:
 
    ```sh
-   shasum -a 256 -c subquo-linux-x64.sha256
+   bun add @avi2dg/subquo
    ```
 
-   On macOS, use `subquo-darwin-arm64.sha256` instead.
-1. Install the executable to a directory on your `PATH`, named `subquo`:
+1. Run the command:
 
    ```sh
-   mkdir -p ~/.local/bin
-   install -m 755 subquo-linux-x64 ~/.local/bin/subquo
+   bunx subquo read
    ```
 
-   On macOS, use `subquo-darwin-arm64` instead.
+The command runs from source when the compiled executable is unavailable.
 
 ## Run beside your quota tools
 
