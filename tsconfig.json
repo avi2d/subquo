@@ -1,6 +1,6 @@
 {
   "extends": "@avi2dg/checks/tsconfig.effect.json",
-  "compilerOptions": { "types": ["bun"], "plugins": [
+  "compilerOptions": { "types": ["bun"], "allowImportingTsExtensions": true, "noEmit": true, "plugins": [
     {
       "name": "@effect/language-service",
       "diagnosticSeverity": {
