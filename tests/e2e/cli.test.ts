@@ -62,6 +62,18 @@ async function invoke(
   return { exit, stdout, stderr };
 }
 
+test("help prints usage and exits successfully instead of failing", async () => {
+  const { root, env } = await setup();
+  try {
+    const result = await invoke(env, ["--help"]);
+    expect(result.exit).toBe(0);
+    expect(result.stdout).toContain("Usage: subquo");
+    expect(result.stderr).toBe("");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("refresh keeps Claude logins separate and does not show a missing expiry as a healthy login", async () => {
   const { root, config, profile, env } = await setup();
   try {
