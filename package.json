@@ -32,8 +32,8 @@
   },
   "devDependencies": {
     "@avi2dg/checks": "0.118.0",
-    "@hughescr/stryker-bun-runner": "1.4.0",
-    "@stryker-mutator/core": "10.0.0",
+    "@hughescr/stryker-bun-runner": "1.6.0",
+    "@stryker-mutator/core": "10.1.1",
     "@types/bun": "1.4.5"
   },
   "trustedDependencies": [
