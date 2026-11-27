@@ -69,6 +69,10 @@ jobs:
           path: ~/.cache/avi2dg-checks/gitleaks
           key: gitleaks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/@avi2dg/checks/src/delivery/gitleaks.ts') }}
       - run: bunx checks-workflows
+      - name: unpack the private secrets pack
+        env:
+          PACK: ${{ secrets.CHECKS_SECRETS_PACK }}
+        run: bunx checks-ci secrets-pack
       - run: bun run lint
       - run: bun run build
       - run: git diff --exit-code

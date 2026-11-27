@@ -94,6 +94,9 @@ An account whose renewal fails reads as login needed, and only its owner signing
 
 Output holds only listed fields and safe error codes, never a vendor's response body.
 No token reaches standard output, standard error, the snapshot, diagnostics, process arguments or test files.
+No login path, account name or machine name goes into a file, a fixture or a log.
+The checks kit's [private pack](https://github.com/avi2d/checks/blob/main/docs/gates/checks-secrets.md#the-private-pack) lists the account names and machine names.
+Its secrets gate fails a commit that adds one of them, also inside a login path.
 Tests plant fake tokens and check that no success or failure path prints them.
 
 ## Reused code

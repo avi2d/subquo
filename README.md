@@ -37,6 +37,15 @@ The command runs from source when the compiled executable is unavailable.
 To run the checks a pull request runs, clone the repository and install dependencies with the Bun version in `.bun-version`.
 Run `bun install` from the repository root, then follow these steps:
 
+1. If you hold the private secrets pack, export its path:
+
+   ```sh
+   export CHECKS_SECRETS_PACK="$HOME/.config/checks/secrets-pack.json"
+   ```
+
+   The secrets gate then also fails on the account names and machine names the pack lists.
+   Without it, the gate runs the kit's rules alone and its last line says so.
+
 1. Run oxlint and every gate of the checks kit:
 
    ```sh
