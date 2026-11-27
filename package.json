@@ -39,6 +39,10 @@
   "trustedDependencies": [
     "@swc/core"
   ],
+  "overrides": {
+    "minimatch": "^11.0.9",
+    "qs": "^6.17.1"
+  },
   "publishConfig": {
     "access": "public"
   }

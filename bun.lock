@@ -19,6 +19,10 @@
   "trustedDependencies": [
     "@swc/core",
   ],
+  "overrides": {
+    "minimatch": "^11.0.9",
+    "qs": "^6.17.1",
+  },
   "packages": {
     "@avi2dg/checks": ["@avi2dg/checks@0.118.0", "", { "dependencies": { "@commitlint/cli": "21.2.3", "@commitlint/config-conventional": "21.2.3", "@effect/platform-bun": "4.0.0", "@effect/platform-node-shared": "4.0.0", "@total-typescript/ts-reset": "0.6.1", "commonmark": "0.31.2", "knip": "6.38.0", "minimatch": "11.0.3" }, "optionalDependencies": { "@avi2dg/checks-darwin-arm64": "0.118.0", "@avi2dg/checks-linux-x64": "0.118.0" }, "peerDependencies": { "@axe-core/playwright": "4.13.0", "@effect/tsgo": "0.45.0", "@swc/core": "1.16.2", "dependency-cruiser": "18.4.0", "effect": "4.0.0", "html-validate": "11.16.0", "jscpd": "5.3.2", "oxlint": "1.83.0", "oxlint-tsgolint": "7.0.2002", "playwright-core": "1.63.0", "postcss-html": "2.0.0", "postcss-value-parser": "4.2.0", "stylelint": "17.16.0", "stylelint-config-standard": "40.0.0", "stylelint-plugin-use-baseline": "1.4.7", "typescript": "7.0.2" }, "optionalPeers": ["@axe-core/playwright", "html-validate", "playwright-core", "postcss-html", "postcss-value-parser", "stylelint", "stylelint-config-standard", "stylelint-plugin-use-baseline"], "bin": { "checks-ci": "dist/bin/delivery/ci/main.ts", "checks-copy": "dist/bin/docs/copy.ts", "checks-docs": "dist/bin/docs/docs.ts", "checks-lint": "dist/bin/core/lint.ts", "checks-test": "dist/bin/testing/test.ts", "checks-flake": "dist/bin/testing/flake.ts", "checks-setup": "dist/bin/delivery/setup.ts", "checks-vendor": "dist/bin/dependencies/vendor.ts", "checks-browser": "dist/bin/quality/browser/browser.ts", "checks-pr-text": "dist/bin/delivery/pr-text.ts", "checks-secrets": "dist/bin/delivery/secrets.ts", "checks-css-size": "dist/bin/quality/css-size.ts", "checks-mutation": "dist/bin/testing/mutation.ts", "checks-adr-index": "dist/bin/docs/adr-index.ts", "checks-changelog": "dist/bin/delivery/changelog-write.ts", "checks-ci-wiring": "dist/bin/delivery/ci-wiring.ts", "checks-docs-only": "dist/bin/delivery/docs-only.ts", "checks-graphwalk": "dist/bin/complexity/graphwalk.ts", "checks-workflows": "dist/bin/delivery/workflows.ts", "checks-advisories": "dist/bin/dependencies/advisories.ts", "checks-release-pr": "dist/bin/delivery/release-pr.ts", "checks-repetition": "dist/bin/complexity/repetition.ts", "checks-local-tests": "dist/bin/testing/local-tests-command.ts", "checks-no-plain-js": "dist/bin/quality/no-plain-js.ts", "checks-plain-steps": "dist/bin/delivery/plain-steps.ts", "checks-release-tag": "dist/bin/delivery/release-tag.ts", "checks-test-layout": "dist/bin/testing/test-layout.ts", "checks-comment-gate": "dist/bin/quality/comment-gate.ts", "checks-commit-title": "dist/bin/delivery/commit-title.ts", "checks-effect-scope": "dist/bin/quality/effect-scope.ts", "checks-lint-coverage": "src/quality/lint-coverage.sh", "checks-release-notes": "dist/bin/delivery/release-notes.ts", "checks-mutation-merge": "dist/bin/testing/mutation-merge.ts", "checks-mutation-scope": "dist/bin/testing/mutation-scope.ts", "checks-release-report": "dist/bin/delivery/release-report.ts", "checks-subsumed-tests": "dist/bin/testing/subsumed-tests.ts", "checks-whole-tree-run": "dist/bin/testing/whole-tree-run.ts", "checks-commit-identity": "dist/bin/delivery/commit-identity.ts", "checks-frontend-syntax": "dist/bin/quality/frontend-syntax.ts", "checks-production-gate": "dist/bin/delivery/production-gate.ts", "checks-release-publish": "dist/bin/delivery/release-publish.ts", "checks-mutation-compare": "dist/bin/testing/mutation-compare.ts", "checks-no-mistakes-test": "dist/bin/delivery/no-mistakes-test.ts", "checks-quarantine-clock": "dist/bin/testing/quarantine-clock.ts", "checks-mutation-baseline": "dist/bin/testing/mutation-baseline.ts", "checks-release-preflight": "dist/bin/delivery/release-preflight.ts", "checks-suppressions-ratchet": "dist/bin/complexity/suppressions-ratchet.ts" } }, "sha512-+NRquf06/T//clXehNx/aQ8GT4aeGC0WeWERobUhC4nCS6mhuAxqBlOD0y3Q0Yd5h5J2RRwBKWj4oiLfltq83A=="],
 
@@ -672,7 +676,7 @@
 
     "minimalistic-assert": ["minimalistic-assert@1.0.1", "", {}, "sha512-UtJcAD4yEaGtjPezWuO9wC4nwUnVH/8/Im3yEHQP4b67cXlD/Qr9hdITCU1xDbSEXg2XKNaP8jsReV7vQd00/A=="],
 
-    "minimatch": ["minimatch@11.0.3", "", { "dependencies": { "@isaacs/nonrecursive-glob-match": "^1.0.3", "brace-expansion": "^5.0.12" } }, "sha512-iny/40PEGkNJQ5/Pv6z3nm6FbRAby32GeZRjCUJk2WnNDbgPSTcdI+DDvLqsgBdD4cD5sMtMheqPPnehCCa8Nw=="],
+    "minimatch": ["minimatch@11.0.9", "", { "dependencies": { "@isaacs/nonrecursive-glob-match": "^1.1.0", "brace-expansion": "^5.0.12" } }, "sha512-KCFkfyjqerNlSstjlhIGNXIKZGA/6O4V4RlhZ+Dsr621SPPw0mzlypE9D9ZOoPiVefHID+j7/XuMMlqfD/F60Q=="],
 
     "minimist": ["minimist@1.2.8", "", {}, "sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA=="],
 
@@ -724,7 +728,7 @@
 
     "prompts": ["prompts@2.4.2", "", { "dependencies": { "kleur": "^3.0.3", "sisteransi": "^1.0.5" } }, "sha512-NxNv/kLguCA7p3jE8oL2aEBsrJWgAakBpgmgK6lpPWV+WuOmY6r2/zbAVnP+T8bQlA0nzHXSJSJW0Hq7ylaD2Q=="],
 
-    "qs": ["qs@6.15.1", "", { "dependencies": { "side-channel": "^1.1.0" } }, "sha512-6YHEFRL9mfgcAvql/XhwTvf5jKcOiiupt2FiJxHkiX1z4j7WL8J/jRHYLluORvc1XxB5rV20KoeK00gVJamspg=="],
+    "qs": ["qs@6.17.1", "", { "dependencies": { "es-define-property": "^1.0.1", "side-channel": "^1.1.1" } }, "sha512-jd3COkaKVgGUW+ZHyEHCG9bH7RoaaiWuMgzsIBjUMVjLAaWGWpoUAVwljVvBHxRu/2qEHnadLGZrkutYUBPQJA=="],
 
     "rechoir": ["rechoir@0.8.0", "", { "dependencies": { "resolve": "^1.20.0" } }, "sha512-/vxpCXddiX8NGfGO/mTafwjq4aFa/71pvamip0++IQk3zG8cbCj0fifNPrjjF1XMXUne91jL9OoxmdykoEtifQ=="],
 
@@ -851,8 +855,6 @@
     "@babel/template/@babel/parser": ["@babel/parser@8.1.2", "", { "dependencies": { "@babel/types": "^8.1.2" }, "bin": "./bin/babel-parser.js" }, "sha512-ZDKU7vaX0VORd2BhaO+3FKr/30TKjbUy3SMZcydiPngnAb+MesgUoh5SJcE5EwEyBj14M5J6fK56GuBqvYmOpw=="],
 
     "@commitlint/resolve-extends/global-directory": ["global-directory@5.0.0", "", { "dependencies": { "ini": "6.0.0" } }, "sha512-1pgFdhK3J2LeM+dVf2Pd424yHx2ou338lC0ErNP2hPx4j8eW1Sp0XqSjNxtk6Tc4Kr5wlWtSvz8cn2yb7/SG/w=="],
-
-    "@stryker-mutator/core/minimatch": ["minimatch@10.2.6", "", { "dependencies": { "brace-expansion": "^5.0.8" } }, "sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A=="],
 
     "cliui/string-width": ["string-width@7.2.0", "", { "dependencies": { "emoji-regex": "^10.3.0", "get-east-asian-width": "^1.0.0", "strip-ansi": "^7.1.0" } }, "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ=="],
 
