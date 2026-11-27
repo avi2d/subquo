@@ -86,7 +86,7 @@ const runCodex = Effect.fnUntraced(function*(env: Record<string, string | undefi
     yield* Effect.tryPromise({ try: () => Promise.resolve(child.stdin.flush()), catch: unchecked });
   });
   const closeStdin = Effect.tryPromise({ try: () => Promise.resolve(child.stdin.end()), catch: unchecked })
-    .pipe(Effect.orElseSucceed(() => undefined));
+    .pipe(Effect.catchTag("RenewalUnchecked", () => Effect.succeed(undefined)));
   const initialized = send({ method: "initialized" });
   const request = send({ id: 2, method: "account/read", params: { refreshToken: true } });
   let requested = false;
@@ -155,4 +155,7 @@ export const renewIdleLogin = Effect.fnUntraced(function*(
   return accepted && after.value > (yield* Clock.currentTimeMillis)
     ? "renewed" satisfies RenewalResult
     : "auth_unverified" satisfies RenewalResult;
-}, Effect.orElseSucceed(() => "auth_unverified" as const));
+}, Effect.catchTags({
+  PlatformError: () => Effect.succeed("auth_unverified" as const),
+  RenewalUnchecked: () => Effect.succeed("auth_unverified" as const),
+}));

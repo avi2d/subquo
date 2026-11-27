@@ -65,7 +65,7 @@ const renew = Effect.fnUntraced(function*(
   const result = yield* withStateLock(files.renewalLock, Effect.gen(function*() {
     yield* Effect.sleep(45_000).pipe(
       Effect.andThen(writeLine("The vendor tool is still running. Let it finish before you retry.", "stderr")),
-      Effect.orElseSucceed(() => undefined),
+      Effect.catchTag("PlatformError", () => Effect.succeed(undefined)),
       Effect.interruptible,
       Effect.forkScoped,
     );
