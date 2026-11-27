@@ -83,6 +83,9 @@ const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefi
   const stdio = yield* Stdio.Stdio;
   const args = yield* stdio.args;
   const [command, flag, id] = args;
+  if (command === "--help" && args.length === 1) {
+    return yield* writeLine("Usage: subquo refresh [--renew-idle <account>] | subquo read [--json]", "stdout");
+  }
   const path = yield* Path.Path;
   if (!path.isAbsolute(home)) {
     yield* writeLine("An absolute HOME is required.", "stderr");

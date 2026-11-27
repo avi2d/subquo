@@ -6,27 +6,38 @@ It owns the read of each named account's quota windows, and the one snapshot tha
 
 ## Report, never route
 
-- It allows a reader to see each window's percent left and reset time, it forbids subquo picking an account, a floor or a spend order, and it takes the trade of each reading tool keeping its own rules.
+- It allows a reader to see each window's percent left and reset time.
+  It forbids subquo picking an account, a floor or a spend order.
+  Each reading tool keeps its own rules.
 
 ## Read a login, never own it
 
-- It allows reading a login in memory and asking the vendor's tool to renew it, it forbids writing or switching a login, and it leaves sign-in to you.
+- It allows reading a login in memory and asking the vendor's tool to renew it.
+  It forbids writing or switching a login and leaves sign-in to you.
 
 ## No secret leaves the read
 
-- It allows only listed fields and safe error codes in output, it forbids a token, a raw vendor response or a login path in the snapshot, errors, logs or test files, and it takes the trade of less detail when a read fails.
+- It allows only listed fields and safe error codes in output.
+  It forbids a token, a raw vendor response or a login path in the snapshot, errors, logs or test files.
+  A failed read gives less detail.
 
 ## Unknown is never full
 
-- It allows a fresh reading as evidence for a pick, it forbids counting a stale, missing or unchecked reading as room, and it takes the trade of passing over an account that may still have room.
+- It allows a fresh reading as evidence for a pick.
+  It forbids counting a stale, missing or unchecked reading as room.
+  A pick may pass over an account that still has room.
 
 ## Every account is named
 
-- It allows only the accounts an explicit account list names, it forbids guessing an account from a default login or reading another account's login in its place, and it takes the trade of a list each machine's owner writes by hand.
+- It allows only the accounts an explicit account list names.
+  It forbids guessing an account from a default login or reading another account's login in its place.
+  Each machine's owner writes the list by hand.
 
 ## A read never waits on a vendor
 
-- It allows `subquo read` to print the last complete snapshot without the network, it forbids a read that waits on a vendor, a lock or a password prompt, and it takes the trade of readings as old as the refresh interval.
+- It allows `subquo read` to print the last complete snapshot without the network.
+  It forbids a read that waits on a vendor, a lock or a password prompt.
+  Readings may be as old as the refresh interval.
 
 ## Scope
 
