@@ -120,6 +120,9 @@ const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefi
   return yield* new CommandFailed();
 });
 
-BunRuntime.runMain(run(Bun.env.HOME ?? "", Bun.env.XDG_STATE_HOME, Bun.env.PATH).pipe(
-  Effect.provide(BunServices.layer),
-), { disableErrorReporting: true });
+// The mutation runner imports every mutated module before the tests, so an unguarded entry runs the CLI inside the test process.
+if (import.meta.main) {
+  BunRuntime.runMain(run(Bun.env.HOME ?? "", Bun.env.XDG_STATE_HOME, Bun.env.PATH).pipe(
+    Effect.provide(BunServices.layer),
+  ), { disableErrorReporting: true });
+}
