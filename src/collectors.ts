@@ -142,7 +142,7 @@ const readKeychainContent = Effect.fnUntraced(function*(
   login: Extract<EnrolledAccount["login"], { readonly store: "macos-keychain" }>,
   env: Record<string, string | undefined>,
 ) {
-  return yield* readKeychainPassword(login, env).pipe(Effect.orElseSucceed(() => undefined as string | undefined));
+  return yield* readKeychainPassword(login, env).pipe(Effect.catchTag("PlatformError", () => Effect.succeed(undefined as string | undefined)));
 });
 
 const readNamedFile = Effect.fnUntraced(function*(file: string) {
@@ -150,7 +150,7 @@ const readNamedFile = Effect.fnUntraced(function*(file: string) {
   const info = yield* fs.stat(file).pipe(Effect.result);
   if (Result.isFailure(info)) return Predicate.isTagged(info.failure.reason, "NotFound") ? required : unverified;
   if (info.success.type !== "File") return unverified;
-  const content = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined as string | undefined));
+  const content = yield* fs.readFileString(file).pipe(Effect.catchTag("PlatformError", () => Effect.succeed(undefined as string | undefined)));
   if (content === undefined) return unverified;
   return content;
 });
@@ -182,7 +182,7 @@ const readCodexAccount = Effect.fnUntraced(function*(
   if (typeof content !== "string") return content;
   const credentials = parseCodexCredentials(content);
   if (!credentials) return unverified;
-  return yield* requestCodexReading(credentials, fetchImpl, now).pipe(Effect.orElseSucceed(() => unverified));
+  return yield* requestCodexReading(credentials, fetchImpl, now);
 });
 
 const readOpenCodeAccount = Effect.fnUntraced(function*(
@@ -194,7 +194,7 @@ const readOpenCodeAccount = Effect.fnUntraced(function*(
   if (typeof content !== "string") return content;
   const key = parseOpenCodeKey(content);
   if (!key) return unverified;
-  return yield* requestOpenCodeReading(key, fetchImpl, now).pipe(Effect.orElseSucceed(() => unverified));
+  return yield* requestOpenCodeReading(key, fetchImpl, now);
 });
 
 export const readAccount = Effect.fnUntraced(function*(

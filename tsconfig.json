@@ -11,10 +11,12 @@
         "globalErrorInEffectCatch": "error",
         "globalErrorInEffectFailure": "error",
         "catchUnfailableEffect": "error",
-        "catchAllToMapError": "error",
+        "catchAllToMapError": "off",
         "missingReturnYieldStar": "error",
         "floatingEffect": "error",
-        "outdatedApi": "error"
+        "outdatedApi": "error",
+        "catchToIgnore": "off",
+        "catchToOrElseSucceed": "off"
       },
       "overrides": [
         {
@@ -25,18 +27,20 @@
             "**/*.cts"
           ],
           "exclude": [
-            "tests/**",
+            "tests/**/*",
             "**/*.test.ts",
-            "**/*.test.tsx"
+            "**/*.test.tsx",
+            "**/node_modules/**/*",
+            "**/release-assets/**/*"
           ],
           "options": {
             "diagnosticSeverity": {
               "nodeBuiltinImport": "error",
-              "asyncFunction": "error",
-              "newPromise": "error",
               "extendsNativeError": "error",
               "processEnv": "error",
-              "processEnvInEffect": "error"
+              "processEnvInEffect": "error",
+              "asyncFunction": "error",
+              "newPromise": "error"
             }
           }
         }
