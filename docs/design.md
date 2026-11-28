@@ -47,6 +47,9 @@ A stale reading without a failed refresh has a `null` code.
 A window holds `id`, `scope`, `percentLeft`, and `resetsAt`.
 A measured percent is a finite number from 0 to 100.
 An unknown percent or reset is `null`.
+When Claude or Codex returns quota without an account-wide five-hour window, subquo marks that window with `status: "not_returned"`.
+Both values are `null` because the reply does not say whether the limit applies.
+Older snapshots can omit the window entirely, which also leaves its quota unknown.
 A reset time is never filled in from a login's expiry or a plan's name.
 Times are UTC strings with millisecond precision, such as `2030-01-01T00:00:00.000Z`.
 

@@ -9,6 +9,20 @@ const measured = {
   windows: [{ id: "weekly", scope: "all", percentLeft: 12, resetsAt: "2030-01-02T00:00:00.000Z" }],
 } satisfies Reading;
 
+test("weekly quota does not imply five-hour capacity or a five-hour reset", async () => {
+  const providers = ["claude", "codex", "opencode-go"] as const;
+  const snapshot = await Effect.runPromise(TestClock.setTime(Date.parse(observedAt)).pipe(
+    Effect.andThen(collectSnapshot(providers.map((provider) => ({
+      id: `example-${provider}`, provider, read: Effect.succeed(measured),
+    })))),
+    Effect.provide(TestClock.layer()),
+  ));
+  const missing = { status: "not_returned", id: "five-hour", scope: "all", percentLeft: null, resetsAt: null } as const;
+  expect(snapshot.accounts.map(({ observation }) => observation.status === "fresh" && observation.windows)).toEqual([
+    [...measured.windows, missing], [...measured.windows, missing], measured.windows,
+  ]);
+});
+
 test("a hanging collector does not delay its peer or outlive its five-second budget", async () => {
   const program = Effect.gen(function*() {
     yield* TestClock.setTime(Date.parse(observedAt));

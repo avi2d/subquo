@@ -9,12 +9,21 @@ const Timestamp = Schema.String.check(
 );
 export const Label = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9_-]{0,63}$/u));
 const FailureCode = Schema.Literals(["timeout", "rate_limited", "auth_required", "auth_unverified"]);
-const Window = Schema.Struct({
+const ReportedWindow = Schema.Struct({
+  status: Schema.optionalKey(Schema.Never),
   id: Label,
   scope: Label,
   percentLeft: Schema.NullOr(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
   resetsAt: Schema.NullOr(Timestamp),
 });
+const MissingFiveHour = Schema.Struct({
+  status: Schema.Literal("not_returned"),
+  id: Schema.Literal("five-hour"),
+  scope: Schema.Literal("all"),
+  percentLeft: Schema.Null,
+  resetsAt: Schema.Null,
+});
+const Window = Schema.Union([ReportedWindow, MissingFiveHour]);
 const Provider = Schema.Literals(["claude", "codex", "opencode-go"]);
 const Windows = Schema.NonEmptyArray(Window).check(
   Schema.makeFilter((windows) => new Set(windows.map(({ id }) => id)).size === windows.length),

@@ -8,6 +8,11 @@ export type Reading = { readonly loginExpiresAt?: number | null } & (
 
 type Collector<R> = Pick<Account, "id" | "provider"> & { readonly read: Effect.Effect<Reading, never, R> };
 
+function accountWindows(provider: Account["provider"], windows: typeof Windows.Type): typeof Windows.Type {
+  if (provider === "opencode-go" || windows.some(({ id }) => id === "five-hour")) return windows;
+  return [...windows, { id: "five-hour", scope: "all", status: "not_returned", percentLeft: null, resetsAt: null }];
+}
+
 const accountLimitMs = 5_000;
 const cycleLimitMs = 10_000;
 const maxConcurrentAccounts = 8;
@@ -37,7 +42,7 @@ export const collectSnapshot = Effect.fnUntraced(function*<R>(collectors: readon
         provider,
         observation: "code" in reading
           ? { status: "unavailable", code: reading.code }
-          : measuredObservation(reading.observedAt, reading.windows, now),
+          : measuredObservation(reading.observedAt, accountWindows(provider, reading.windows), now),
         ...(days === undefined ? {} : { loginEndsInDays: days }),
       };
     }),
