@@ -2,7 +2,7 @@
 import { BunRuntime, BunServices } from "@effect/platform-bun";
 import { Clock, Effect, Path, Schema, Stdio, Stream } from "effect";
 import { loadAccounts } from "./accounts";
-import { readAccount } from "./collectors";
+import { readAccount, type AccountReadOptions } from "./collectors";
 import { collectSnapshot } from "./collect";
 import { type Snapshot, observationAt, serializeSnapshot } from "./index";
 import { renewIdleLogin } from "./renewal";
@@ -79,7 +79,12 @@ const renew = Effect.fnUntraced(function*(
   if (result.value === "auth_required" || result.value === "auth_unverified") return yield* new CommandFailed();
 });
 
-const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefined, executablePath: string | undefined) {
+export const runCommand = Effect.fnUntraced(function*(
+  home: string,
+  stateHome: string | undefined,
+  executablePath: string | undefined,
+  readOptions?: AccountReadOptions,
+) {
   const stdio = yield* Stdio.Stdio;
   const args = yield* stdio.args;
   const [command, flag, id] = args;
@@ -106,7 +111,7 @@ const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefi
     return yield* withStateLock(files.lock, Effect.gen(function*() {
       const { accounts } = yield* loadAccounts(files.accounts);
       const snapshot = yield* collectSnapshot(accounts.map((account) => ({
-        id: account.id, provider: account.provider, read: readAccount(account),
+        id: account.id, provider: account.provider, read: readAccount(account, readOptions),
       })));
       yield* writeSnapshot(files.snapshot, snapshot);
     })).pipe(Effect.tapError(() => writeLine("Could not refresh subquo. Check the account list and state directory.", "stderr")));
@@ -122,7 +127,7 @@ const run = Effect.fnUntraced(function*(home: string, stateHome: string | undefi
 
 // The mutation runner imports every mutated module before the tests, so an unguarded entry runs the CLI inside the test process.
 if (import.meta.main) {
-  BunRuntime.runMain(run(Bun.env.HOME ?? "", Bun.env.XDG_STATE_HOME, Bun.env.PATH).pipe(
+  BunRuntime.runMain(runCommand(Bun.env.HOME ?? "", Bun.env.XDG_STATE_HOME, Bun.env.PATH).pipe(
     Effect.provide(BunServices.layer),
   ), { disableErrorReporting: true });
 }
