@@ -27,7 +27,8 @@ function renderAccount(account: Snapshot["accounts"][number], now: number): stri
   const reason = observation.status === "fresh" || observation.code === null ? "" : ` (${observation.code})`;
   const heading = `${account.id}: ${observation.status}${reason}${loginNotice(account.loginEndsInDays)}`;
   if (observation.status === "unavailable") return [heading];
-  return [heading, ...observation.windows.map(({ id, percentLeft, resetsAt }) => {
+  return [heading, ...observation.windows.map(({ id, percentLeft, resetsAt, status }) => {
+    if (status === "not_returned") return `  ${id}: not returned`;
     const percent = percentLeft === null ? "unknown" : `${percentLeft}% left`;
     return `  ${id}: ${percent}, resets at ${resetsAt ?? "an unknown time"}`;
   })];

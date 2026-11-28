@@ -47,6 +47,10 @@ A stale reading without a failed refresh has a `null` code.
 A window holds `id`, `scope`, `percentLeft`, and `resetsAt`.
 A measured percent is a finite number from 0 to 100.
 An unknown percent or reset is `null`.
+When Claude or Codex returns quota without an account-wide five-hour window, subquo marks that window with `status: "not_returned"`.
+Both values are `null` because the reply does not say whether the limit applies.
+Such a window is a disclosed unknown, so it does not block a pick.
+Older snapshots can omit the window entirely, which also leaves its quota unknown.
 A reset time is never filled in from a login's expiry or a plan's name.
 Times are UTC strings with millisecond precision, such as `2030-01-01T00:00:00.000Z`.
 
@@ -64,7 +68,8 @@ A countdown is not proof that the sign-in still works.
 The deadline is the earlier of 120 seconds after `observedAt` and the first known window reset.
 At the deadline, the reading becomes stale.
 Recheck the reading's age at the time of use, even if the file marks it `fresh`.
-The pick helper rejects unknown percentages and resets.
+The pick helper rejects unknown percentages and resets in the windows the vendor returned.
+It also rejects a reading whose only window is marked `not_returned`.
 After a reset, subquo waits for a new reading rather than assuming the window is full again.
 
 The account ID comes from the private account list.
@@ -79,6 +84,7 @@ An account's usable headroom is the smallest of the limits that apply to a job, 
 With 40% left in a five-hour window and 12% left in a weekly window, the headroom is 12%.
 A window that covers only one kind of work, such as code review, does not limit other jobs.
 A limit with an unknown value leaves the headroom unknown.
+A five-hour window marked `not_returned` is not a limit the vendor reported, so the headroom comes from the windows the reply did return.
 A Claude model limit whose model subquo cannot name makes the account read as login unchecked, so the limit is never dropped.
 
 ## Logins
