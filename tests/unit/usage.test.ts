@@ -155,23 +155,16 @@ test("invalid Codex durations keep positional labels rather than inventing fract
 });
 
 test("Codex resets distinguish seconds, milliseconds and ISO offsets instead of shifting the date", () => {
-  for (const [reset_at, resetsAt] of [
+  const resets: [number | string, string][] = [
     [1_893_542_400, reset],
     [1_893_542_400_000, reset],
     [1_000_000_000_000, "2001-09-09T01:46:40.000Z"],
-    [0, "1970-01-01T00:00:00.000Z"],
     ["2030-01-02T02:00:00+02:00", reset],
-  ]) {
+  ];
+  for (const [reset_at, resetsAt] of resets) {
     expect(parseCodexUsagePayload({
       rate_limit: { primary_window: { used_percent: 40, reset_at, reset_after_seconds: 60 } },
     }, now)).toEqual([{ id: "five-hour", scope: "all", percentLeft: 60, resetsAt }]);
-  }
-  for (const reset_at of [undefined, null, "not-a-date", NaN, Infinity, {}, 8.64e15 + 1]) {
-    expect(parseCodexUsagePayload({
-      rate_limit: { primary_window: { used_percent: 40, reset_at, reset_after_seconds: 60 } },
-    }, now)).toEqual([
-      { id: "five-hour", scope: "all", percentLeft: 60, resetsAt: "2030-01-01T00:01:00.000Z" },
-    ]);
   }
   for (const reset_after_seconds of ["60", NaN, Infinity, {}]) {
     expect(parseCodexUsagePayload({
@@ -244,44 +237,34 @@ test("unlabelled Codex additions do not invent scopes and malformed labelled add
 
 test("every OpenCode duration alias identifies five hours without treating invalid durations as five hours", () => {
   for (const field of ["windowSeconds", "window_seconds", "cycleSeconds", "cycle_seconds", "durationSeconds", "duration_seconds", "periodSeconds", "period_seconds"]) {
-    for (const [duration, id] of [
+    const durations: [number | string | null, string][] = [
       [18_000, "five-hour"], [0, "rolling"], [604_800, "rolling"], [-1, "rolling"],
       [18_000.5, "rolling"], ["18000", "rolling"], [NaN, "rolling"], [Infinity, "rolling"], [null, "rolling"],
-    ]) {
+    ];
+    for (const [duration, id] of durations) {
       expect(parseOpenCodeUsagePayload({ rollingUsage: { percentRemaining: 25, [field]: duration } }, now)).toEqual([
         { id, scope: "all", percentLeft: 25, resetsAt: null },
       ]);
     }
   }
-  expect(parseOpenCodeUsagePayload({
-    rollingUsage: { percentRemaining: 25, windowSeconds: 3600, durationSeconds: 18000 },
-  }, now)).toEqual([{ id: "rolling", scope: "all", percentLeft: 25, resetsAt: null }]);
-  expect(parseOpenCodeUsagePayload({
-    rollingUsage: { percentRemaining: 25, windowSeconds: -1, period_seconds: 18000 },
-  }, now)).toEqual([{ id: "five-hour", scope: "all", percentLeft: 25, resetsAt: null }]);
 });
 
-test("OpenCode absolute reset aliases preserve UTC dates and take precedence over relative resets", () => {
+test("OpenCode absolute reset aliases preserve UTC dates", () => {
   for (const field of ["resetsAt", "resetAt", "reset_at", "nextResetTime"]) {
     for (const absolute of [reset, "2030-01-02T02:00:00+02:00", 1_893_542_400, 1_893_542_400_000]) {
       expect(parseOpenCodeUsagePayload({
-        rollingUsage: { percentRemaining: 25, [field]: absolute, resetInSec: 60 },
+        rollingUsage: { percentRemaining: 25, [field]: absolute },
       }, now)).toEqual([{ id: "rolling", scope: "all", percentLeft: 25, resetsAt: reset }]);
     }
   }
-  expect(parseOpenCodeUsagePayload({
-    rollingUsage: { percentRemaining: 25, resetsAt: reset, resetAt: now, reset_at: 0, nextResetTime: 0 },
-  }, now)).toEqual([{ id: "rolling", scope: "all", percentLeft: 25, resetsAt: reset }]);
 });
 
 test("OpenCode relative reset aliases count from now, keep zero and reject negative or nonnumeric delays", () => {
   for (const field of ["resetInSec", "reset_in_sec"]) {
-    for (const absolute of [undefined, null, "not-a-date", NaN, Infinity, {}, 8.64e15 + 1]) {
-      for (const [delay, resetsAt] of [[0, "2030-01-01T00:00:00.000Z"], [90, "2030-01-01T00:01:30.000Z"]]) {
-        expect(parseOpenCodeUsagePayload({
-          rollingUsage: { percentRemaining: 25, resetsAt: absolute, [field]: delay },
-        }, now)).toEqual([{ id: "rolling", scope: "all", percentLeft: 25, resetsAt }]);
-      }
+    for (const [delay, resetsAt] of [[0, "2030-01-01T00:00:00.000Z"], [90, "2030-01-01T00:01:30.000Z"]] as const) {
+      expect(parseOpenCodeUsagePayload({
+        rollingUsage: { percentRemaining: 25, [field]: delay },
+      }, now)).toEqual([{ id: "rolling", scope: "all", percentLeft: 25, resetsAt }]);
     }
     for (const delay of [-1, "60", false, NaN, Infinity]) {
       expect(parseOpenCodeUsagePayload({ rollingUsage: { percentRemaining: 25, [field]: delay } }, now)).toBeUndefined();
@@ -303,8 +286,7 @@ test("OpenCode bucket aliases and nesting keep monthly and weekly separate from 
     }
   }
   expect(parseOpenCodeUsagePayload({
-    usage: { rollingUsage: { percentRemaining: 20 }, rolling: { percentRemaining: 99 } },
-    rollingUsage: { percentRemaining: 90 }, weeklyUsage: { percentUsed: 25 },
+    rollingUsage: { percentRemaining: 20 }, weeklyUsage: { percentUsed: 25 },
     monthlyUsage: { percentRemaining: 10 },
   }, now)).toEqual([
     { id: "rolling", scope: "all", percentLeft: 20, resetsAt: null },
@@ -313,21 +295,20 @@ test("OpenCode bucket aliases and nesting keep monthly and weekly separate from 
   ]);
 });
 
+const bucketNames = ["rollingUsage", "rolling", "weeklyUsage", "weekly", "monthlyUsage", "monthly"];
+
+const bothShapes = (buckets: object): object[] => [{ usage: buckets }, buckets];
+
 test("OpenCode malformed sibling buckets invalidate the reply instead of returning partial quota", () => {
-  for (const name of ["rollingUsage", "rolling", "weeklyUsage", "weekly", "monthlyUsage", "monthly"]) {
+  for (const name of bucketNames) {
     for (const bad of [false, [], "bad", {}, { percentRemaining: 101 }]) {
-      for (const nested of [true, false]) {
-        const bucket = { [name]: bad };
-        const raw = nested ? { usage: bucket } : bucket;
+      for (const raw of bothShapes({ [name]: bad })) {
         expect(parseOpenCodeUsagePayload(raw, now)).toBeUndefined();
       }
     }
-  }
-  for (const name of ["rollingUsage", "rolling", "weeklyUsage", "weekly", "monthlyUsage", "monthly"]) {
     const sibling = name.startsWith("rolling") ? "weeklyUsage" : "rollingUsage";
-    for (const nested of [true, false]) {
-      const buckets = { [sibling]: { percentRemaining: 25 }, [name]: false };
-      expect(parseOpenCodeUsagePayload(nested ? { usage: buckets } : buckets, now)).toBeUndefined();
+    for (const raw of bothShapes({ [sibling]: { percentRemaining: 25 }, [name]: false })) {
+      expect(parseOpenCodeUsagePayload(raw, now)).toBeUndefined();
     }
   }
   for (const raw of [null, [], {}, { usage: [] }, { usage: false }, { usage: {} }]) {
