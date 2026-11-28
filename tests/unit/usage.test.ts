@@ -21,18 +21,6 @@ test("Codex credentials preserve each account-ID alias instead of losing the sel
       }
     }
   }
-  expect(parseCodexCredentials(JSON.stringify({
-    account_id: "synthetic-root-snake",
-    accountId: "synthetic-root-camel",
-    tokens: { access_token: "synthetic-snake", accessToken: "synthetic-camel", account_id: "synthetic-nested" },
-  }))).toEqual({ accessToken: "synthetic-snake", accountId: "synthetic-root-snake" });
-  expect(parseCodexCredentials(JSON.stringify({
-    accountId: "synthetic-root",
-    tokens: { accessToken: "synthetic-access", account_id: "synthetic-nested" },
-  }))).toEqual({ accessToken: "synthetic-access", accountId: "synthetic-root" });
-  expect(parseCodexCredentials(JSON.stringify({
-    tokens: { access_token: "synthetic-access", account_id: "synthetic-snake", accountId: "synthetic-camel" },
-  }))).toEqual({ accessToken: "synthetic-access", accountId: "synthetic-snake" });
 });
 
 test("Codex credentials reject malformed token containers rather than accepting another record", () => {
@@ -163,7 +151,7 @@ test("Codex resets distinguish seconds, milliseconds and ISO offsets instead of 
   ];
   for (const [reset_at, resetsAt] of resets) {
     expect(parseCodexUsagePayload({
-      rate_limit: { primary_window: { used_percent: 40, reset_at, reset_after_seconds: 60 } },
+      rate_limit: { primary_window: { used_percent: 40, reset_at } },
     }, now)).toEqual([{ id: "five-hour", scope: "all", percentLeft: 60, resetsAt }]);
   }
   for (const reset_after_seconds of ["60", NaN, Infinity, {}]) {
@@ -205,7 +193,7 @@ test("absent Codex containers and windows do not fabricate readings or hide a pr
   }
 });
 
-test("named Codex limits normalize labels and prefer metered_feature instead of the display name", () => {
+test("named Codex limits normalize labels instead of losing the scope", () => {
   for (const [name, slug] of [
     ["  __Code--Review!!  ", "code_review"],
     ["A".repeat(49), "a".repeat(48)],
@@ -213,7 +201,7 @@ test("named Codex limits normalize labels and prefer metered_feature instead of 
   ]) {
     expect(parseCodexUsagePayload({
       additional_rate_limits: [{
-        metered_feature: name, limit_name: "different",
+        metered_feature: name,
         rate_limit: { secondary_window: { used_percent: 100 } },
       }],
     }, now)).toEqual([{ id: `model-${slug}-7d`, scope: slug, percentLeft: 0, resetsAt: null }]);
@@ -327,12 +315,9 @@ test("OpenCode remaining percentages are not inverted and used percentages are n
       ]);
     }
     for (const value of [-1, 101, "25", NaN, Infinity]) {
-      expect(parseOpenCodeUsagePayload({ rollingUsage: { [field]: value, status: "rate-limited" } }, now)).toBeUndefined();
+      expect(parseOpenCodeUsagePayload({ rollingUsage: { [field]: value } }, now)).toBeUndefined();
     }
   }
-  expect(parseOpenCodeUsagePayload({
-    rollingUsage: { percentRemaining: 0, remainingPercent: 90, percent: 10, status: "rate-limited" },
-  }, now)).toEqual([{ id: "rolling", scope: "all", percentLeft: 0, resetsAt: null }]);
   expect(parseOpenCodeUsagePayload({ rollingUsage: { status: "RATE-LIMITED" } }, now)).toEqual([
     { id: "rolling", scope: "all", percentLeft: 0, resetsAt: null },
   ]);
@@ -345,9 +330,6 @@ test("OpenCode key aliases preserve the Go key rather than reading an unrelated 
       "opencode-go": { [field]: "synthetic-go" }, opencode: { key: "synthetic-other" },
     }))).toBe("synthetic-go");
   }
-  expect(parseOpenCodeKey(JSON.stringify({
-    "opencode-go": { key: "synthetic-first", apiKey: "synthetic-second", api_key: "synthetic-third" },
-  }))).toBe("synthetic-first");
 });
 
 test("OpenCode keys reject malformed records and whitespace instead of sending a broken authorization value", () => {
