@@ -142,6 +142,7 @@ const readKeychainContent = Effect.fnUntraced(function*(
   login: Extract<EnrolledAccount["login"], { readonly store: "macos-keychain" }>,
   env: Record<string, string | undefined>,
 ) {
+  if (process.platform !== "darwin") return undefined;
   return yield* readKeychainPassword(login, env).pipe(Effect.catchTag("PlatformError", () => Effect.succeed(undefined as string | undefined)));
 });
 
@@ -160,11 +161,11 @@ const readClaudeAccount = Effect.fnUntraced(function*(
   fetchImpl: FetchImpl,
   env: Record<string, string | undefined>,
   now: number,
+  readKeychain: typeof readKeychainContent,
 ) {
-  if (account.login.store === "macos-keychain" && process.platform !== "darwin") return unverified;
   const content = yield* (account.login.store === "file"
     ? readNamedFile(account.login.path)
-    : readKeychainContent(account.login, env));
+    : readKeychain(account.login, env));
   if (typeof content !== "string") return content ?? unverified;
   const credentials = parseClaudeCredentials(content);
   if (!credentials) return unverified;
@@ -197,13 +198,18 @@ const readOpenCodeAccount = Effect.fnUntraced(function*(
   return yield* requestOpenCodeReading(key, fetchImpl, now);
 });
 
-export const readAccount = Effect.fnUntraced(function*(
-  account: EnrolledAccount,
-  options: { readonly fetchImpl?: FetchImpl; readonly env?: Record<string, string | undefined> } = {},
-) {
+export type AccountReadOptions = {
+  readonly fetchImpl?: FetchImpl;
+  readonly env?: Record<string, string | undefined>;
+  readonly readKeychain?: typeof readKeychainContent;
+};
+
+export const readAccount = Effect.fnUntraced(function*(account: EnrolledAccount, options: AccountReadOptions = {}) {
   const fetchImpl = options.fetchImpl ?? fetch;
   const now = yield* Clock.currentTimeMillis;
-  if (account.provider === "claude") return yield* readClaudeAccount(account, fetchImpl, options.env ?? {}, now);
+  if (account.provider === "claude") {
+    return yield* readClaudeAccount(account, fetchImpl, options.env ?? {}, now, options.readKeychain ?? readKeychainContent);
+  }
   const file = account.login.path;
   if (account.provider === "codex") return yield* readCodexAccount(file, fetchImpl, now);
   return yield* readOpenCodeAccount(file, fetchImpl, now);
