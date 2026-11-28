@@ -35,7 +35,7 @@ async function pickFromReply(provider: "claude" | "codex", windows: ReturnType<t
     Effect.andThen(collectSnapshot([{ id: `example-${provider}`, provider, read: Effect.succeed(measuredAt(observedAt, windows)) }])),
     Effect.provide(TestClock.layer()),
   ));
-  const [account] = snapshot.accounts;
+  const account = snapshot.accounts.at(0);
   if (account === undefined) throw new Error("Account missing");
   return pickEvidenceAt(account.observation, Date.parse(observedAt))?.windows;
 }
