@@ -149,7 +149,8 @@ export function observationAt(observation: Observation, now: number): Observatio
 export function pickEvidenceAt(observation: Observation, now: number): FreshObservation | undefined {
   const current = observationAt(observation, now);
   if (current.status !== "fresh") return undefined;
-  return current.windows.every(({ percentLeft, resetsAt }) => percentLeft !== null && resetsAt !== null)
+  const returned = current.windows.filter(({ status }) => status !== "not_returned");
+  return returned.length > 0 && returned.every(({ percentLeft, resetsAt }) => percentLeft !== null && resetsAt !== null)
     ? current
     : undefined;
 }

@@ -121,6 +121,15 @@ test.each(["timeout", "rate_limited", "auth_required", "auth_unverified"])(
   },
 );
 
+test("does not offer pick evidence from a reading whose only window is a not-returned five-hour window", () => {
+  const missing = { status: "not_returned", id: "five-hour", scope: "all", percentLeft: null, resetsAt: null };
+  const snapshot = Effect.runSync(parseSnapshot(JSON.stringify(singleAccount({ ...freshReading, windows: [missing] }))));
+  const account = snapshot.accounts.at(0);
+  if (account === undefined) throw new Error("Sample account missing");
+  expect(account.observation.status).toBe("fresh");
+  expect(pickEvidenceAt(account.observation, afterOneMinute)).toBeUndefined();
+});
+
 function fakeToken() {
   return [crypto.randomUUID(), crypto.randomUUID()].join(".");
 }
