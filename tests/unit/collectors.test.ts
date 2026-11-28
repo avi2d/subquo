@@ -30,6 +30,17 @@ function fakeJwt(expSeconds: number): string {
 }
 
 
+test("Claude utilization accepts both endpoints and rejects values outside the percentage range", () => {
+  for (const [used, left] of [[0, 100], [100, 0]]) {
+    expect(parseClaudeUsagePayload({ five_hour: { utilization: used } })).toEqual([
+      { id: "five-hour", scope: "all", percentLeft: left, resetsAt: null },
+    ]);
+  }
+  for (const used of [-1, 101, "50", NaN, Infinity]) {
+    expect(parseClaudeUsagePayload({ five_hour: { utilization: used } })).toBeUndefined();
+  }
+});
+
 test("a Claude utilization reply leaves the remainder, not the usage, as percent left", async () => {
   const windows = parseClaudeUsagePayload({ five_hour: { utilization: 60, resets_at: reset } });
   expect(windows).toEqual([{ id: "five-hour", scope: "all", percentLeft: 40, resetsAt: reset }]);
@@ -176,6 +187,27 @@ test("a legacy Claude reply with a missing model bucket keeps the windows it has
 test("a Claude window without a reset keeps a null reset instead of dropping the account", async () => {
   const windows = parseClaudeUsagePayload({ five_hour: { utilization: 60 } });
   expect(windows).toEqual([{ id: "five-hour", scope: "all", percentLeft: 40, resetsAt: null }]);
+});
+
+test("a named Codex zero-second window is not mislabeled as five-hour", () => {
+  const windows = parseCodexUsagePayload({
+    additional_rate_limits: [{
+      metered_feature: "  Code--Review!!  ",
+      rate_limit: { primary_window: { used_percent: 20, limit_window_seconds: 0, reset_after_seconds: 0 } },
+    }],
+  }, now);
+  expect(windows).toEqual([
+    { id: "model-code_review-window-0s", scope: "code_review", percentLeft: 80, resetsAt: "2030-01-01T00:00:00.000Z" },
+  ]);
+});
+
+test("an OpenCode five-hour window at its reset is not labeled rolling or rejected", () => {
+  expect(parseOpenCodeUsagePayload({
+    usage: { rollingUsage: { percentRemaining: 100, windowSeconds: 18000, resetInSec: 0 } },
+  }, now)).toEqual([
+    { id: "five-hour", scope: "all", percentLeft: 100, resetsAt: "2030-01-01T00:00:00.000Z" },
+  ]);
+  expect(parseOpenCodeUsagePayload({ rollingUsage: { percentRemaining: 20, resetInSec: -1 } }, now)).toBeUndefined();
 });
 
 test("a Codex usage reply keeps code review out of the shared limits", async () => {
